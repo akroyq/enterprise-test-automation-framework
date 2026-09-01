@@ -1,0 +1,11 @@
+Requirement ID,Module / Feature,Risk Priority,Risk Score,Manual Test ID,Automated Test Name,Test Framework,Execution Layer
+REQ-CLM-001,Claim Creation (Auto/Health/Property),P1,54,UI-001/UI-002/UI-003,createClaimShouldReturn201,REST Assured + TestNG,API
+REQ-CLM-002,Claim Creation Schema Validation,P1,48,API-002/API-003/API-004,createClaimMissingRequiredFieldShouldFail,REST Assured + TestNG,API
+REQ-CALC-001,Claims Settlement Calculation,P0,96,API-009/API-010/API-011,calculationShouldMatchReferenceData,REST Assured + TestNG,API
+REQ-CALC-002,Calculation Engine Idempotency,P0,80,API-012,calculationShouldBeIdempotent,REST Assured + TestNG,API
+REQ-CALC-003,Unknown Claim Error Handling,P1,40,API-013,unknownClaimShouldReturn404,REST Assured + TestNG,API
+REQ-INT-001,Third-Party Assessor Ingestion,P0,90,API-014,assessorIntegrationShouldAcceptValidPayload,REST Assured + TestNG,API
+REQ-INT-002,Assessor Payload Validation,P0,80,API-015,assessorIntegrationShouldRejectInvalidPayload,REST Assured + TestNG,API
+REQ-UI-001,Claim Submission UI Flow,P1,60,UI-001,createClaimShouldShowSubmittedStatus,Selenium WebDriver,UI
+REQ-UI-002,End-to-End Submit & Calculate Journey,P0,90,UI-006,crossFunctionalFlowCreateThenCalculateShouldShowSettlement,Selenium WebDriver,UI
+REQ-UI-003,Boundary Deductible Calculations,P0,85,UI-007/UI-008/UI-009,calculationShouldMatchReferenceData,REST Assured / Selenium,API / UI

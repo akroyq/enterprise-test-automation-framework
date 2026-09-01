@@ -1,0 +1,24 @@
+# UI Manual Test Case Specifications
+
+**Application:** Insurance Claims Portal  
+**Reviewed By:** QA Lead / Quality Architect  
+**Objective:** Verify end-to-end user workflows, field validation, boundary calculations, and UI state handling across all supported insurance lines (Auto, Health, Property).
+
+---
+
+### Test Cases Summary Table
+
+| Test Case ID | Scenario / Feature | Priority | Preconditions | Test Steps | Test Data | Expected Result | Automation Status |
+|---|---|---|---|---|---|---|---|
+| **TC-UI-001** | Submit valid Auto claim | **P1** | Portal is accessible at base URL | 1. Open home page.<br/>2. Enter valid Policy ID.<br/>3. Select "auto" from dropdown.<br/>4. Enter Claim Amount and Deductible.<br/>5. Click "Submit claim" button. | Policy: `POL-1001`<br/>Product: `auto`<br/>Amount: `1000`<br/>Deductible: `100` | • Claim ID is generated (format `CLM-XXXXXXXXXX`).<br/>• Status badge shows `SUBMITTED`.<br/>• Error message area remains empty. | **Automated** (`ClaimsUiTest`) |
+| **TC-UI-002** | Submit valid Health claim | **P1** | Portal is accessible | 1. Open home page.<br/>2. Enter Policy ID.<br/>3. Select "health" from dropdown.<br/>4. Enter Amount and Deductible.<br/>5. Click "Submit claim". | Policy: `POL-2002`<br/>Product: `health`<br/>Amount: `5000`<br/>Deductible: `250` | • Unique Claim ID generated.<br/>• Status badge updates to `SUBMITTED`. | **Manual** |
+| **TC-UI-003** | Submit valid Property claim | **P1** | Portal is accessible | 1. Open home page.<br/>2. Enter Policy ID.<br/>3. Select "property" from dropdown.<br/>4. Enter Amount and Deductible.<br/>5. Click "Submit claim". | Policy: `POL-3003`<br/>Product: `property`<br/>Amount: `25000`<br/>Deductible: `1000` | • Unique Claim ID generated.<br/>• Status badge updates to `SUBMITTED`. | **Manual** |
+| **TC-UI-004** | Form validation on missing Policy ID | **P1** | Portal is accessible | 1. Leave Policy ID field empty.<br/>2. Fill in Amount and Deductible.<br/>3. Click "Submit claim". | Amount: `1000`<br/>Deductible: `100` | • Browser displays validation popup ("Please fill out this field").<br/>• Form submission is blocked. | **Manual** |
+| **TC-UI-005** | Form validation on missing Amount | **P1** | Portal is accessible | 1. Enter Policy ID.<br/>2. Leave Claim Amount empty.<br/>3. Click "Submit claim". | Policy: `POL-1001`<br/>Deductible: `100` | • Browser validation blocks submission on required amount field. | **Manual** |
+| **TC-UI-006** | End-to-End flow: Create claim & Calculate settlement | **P0** | Portal is accessible | 1. Fill all valid claim fields.<br/>2. Click "Submit claim".<br/>3. Verify Claim ID and status.<br/>4. Click "Calculate claim" button. | Policy: `POL-1001`<br/>Product: `auto`<br/>Amount: `1000`<br/>Deductible: `100` | • Settlement value displays exact amount `900` ($1000 - $100$).<br/>• No page reload or UI flickering occurs. | **Automated** (`ClaimsUiTest`) |
+| **TC-UI-007** | Boundary check: Deductible equals Claim Amount | **P0** | Portal is accessible | 1. Enter identical values in Amount and Deductible.<br/>2. Submit claim.<br/>3. Click "Calculate claim". | Amount: `500`<br/>Deductible: `500` | • Settlement displays `0` cleanly (no null or NaN). | **Manual** |
+| **TC-UI-008** | Boundary check: Deductible greater than Claim Amount | **P0** | Portal is accessible | 1. Enter Deductible greater than Claim Amount.<br/>2. Submit claim.<br/>3. Click "Calculate claim". | Amount: `200`<br/>Deductible: `500` | • Settlement displays `0` (system enforces non-negative floor rule). | **Manual** |
+| **TC-UI-009** | Boundary check: Zero Deductible | **P0** | Portal is accessible | 1. Enter valid amount and `0` in Deductible.<br/>2. Submit claim.<br/>3. Click "Calculate claim". | Amount: `1500`<br/>Deductible: `0` | • Settlement displays full claim amount `1500`. | **Manual** |
+| **TC-UI-010** | Attempt calculation before submitting a claim | **P1** | Fresh session without submitting a claim | 1. Open portal.<br/>2. Directly click "Calculate claim" button. | None | • Warning message displays: *"Submit a claim first"*.<br/>• Settlement field remains empty. | **Manual** |
+| **TC-UI-011** | Negative amount input prevention | **P2** | Portal is accessible | 1. Attempt typing negative number in Claim Amount.<br/>2. Click "Submit claim". | Amount: `-100` | • Input field restricts negative entry via `min="0"` constraint. | **Manual** |
+| **TC-UI-012** | UI Layout, responsive alignment, and accessibility | **P2** | Various screen resolutions | 1. Resize browser from mobile (375px) to desktop (1920px).<br/>2. Inspect accessibility labels (`aria-label`, `data-testid`). | N/A | • Form remains neatly centered in modern card container.<br/>• Labels are cleanly placed above textboxes with ample padding.<br/>• All interactive elements have descriptive accessibility attributes. | **Manual** |

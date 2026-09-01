@@ -1,0 +1,37 @@
+name: Java QA Automation
+on: [push, pull_request]
+
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r demo-app/requirements.txt
+      - run: nohup uvicorn demo-app.app:app --host 0.0.0.0 --port 8000 &
+      - run: sleep 3
+      - run: mvn -q -f automation/pom.xml test -pl api-restassured -am
+
+  ui:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install -r demo-app/requirements.txt
+      - run: nohup uvicorn demo-app.app:app --host 0.0.0.0 --port 8000 &
+      - run: sleep 3
+      - run: mvn -q -f automation/pom.xml test -pl ui-selenium -am

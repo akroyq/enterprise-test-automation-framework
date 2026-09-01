@@ -1,2 +1,126 @@
-# enterprise-test-automation-framework
-Enterprise-grade multi-module test automation framework &amp; quality architecture built with Java 17, REST Assured, Selenium WebDriver 4, TestNG, ExtentReports 5.x, and GitHub Actions CI/CD. Features thread-safe parallel execution, dynamic retry analyzer, cross-browser engine, and reusable core utilities.
+# Enterprise Insurance Claims Platform — Quality Architect Submission
+
+This repository contains the end-to-end Quality Architecture, Risk-Based Test Strategy, AI Agent Artifacts, and Automated Test Suites for an enterprise multi-product Insurance Claims Processing Platform.
+
+---
+
+## 🏛️ Technology Stack & Architecture
+
+- **Automation Architecture**: **Multi-Module Maven (`claims-automation-parent`)**
+- **Core Framework (`automation-core`)**: **ExtentReports 5.x + TestNG Listeners + Dynamic Retry (`IRetryAnalyzer`) + QA Utilities (`DatabaseUtil`, `EmailUtil`, `DataGeneratorUtil`)**
+- **API Automation (`api-restassured`)**: **Java 17 + REST Assured + TestNG + Jayway JsonPath + ExtentReports 5.x + Parallel Execution + Maven**
+- **UI Automation (`ui-selenium`)**: **Java 17 + Selenium WebDriver 4 + Multi-Browser (`DriverFactory` for Chrome/Edge/Firefox) + TestNG + PageFactory (`@FindBy`) + ExtentReports 5.x + Parallel Execution (`ThreadLocal<WebDriver>`) + Maven**
+- **Test Reporting**: **ExtentReports 5.x Spark Interactive HTML Reports (with group categorization and embedded failure screenshots for UI)**
+- **Test Execution Resilience**: **Automatic Flaky Test Retry (`IRetryAnalyzer` + `IAnnotationTransformer`) & Multi-Threaded Parallel Test Runs**
+- **Underlying Demo Application**: **FastAPI + Uvicorn (Python 3.10+)**
+- **Continuous Integration (CI)**: **GitHub Actions** (`.github/workflows/ci.yml`)
+
+---
+
+## 📁 Repository Structure
+
+```
+submission/
+├── CASE_STUDY.md           # Enterprise Risk-Based Strategy & Quality Architecture
+├── README.md               # Quick start guide & architectural overview
+├── .github/
+│   └── workflows/
+│       └── ci.yml          # GitHub Actions multi-stage automated pipeline
+├── agents/                 # AI Agent Artifacts (Section 5B Deliverables)
+│   ├── prompts.md          # Structured prompt engineering catalog
+│   ├── system-instructions.md # Quality Architect persona & constraints
+│   └── refinement-log.md   # Iterative human-in-the-loop refinement log
+├── test-cases/             # Comprehensive Manual Test Specifications
+│   ├── ui-manual-tests.md  # Detailed UI manual test matrix
+│   └── api-manual-tests.md # Detailed API test cases with payloads & assertions
+├── metrics/
+│   └── coverage-matrix.csv # Requirements-to-Test Traceability Matrix
+├── demo-app/               # Application Under Test
+│   ├── app.py              # FastAPI service with UI and REST endpoints
+│   └── requirements.txt    # Python dependencies
+├── automation/             # Multi-Module Maven Automation Projects
+│   ├── pom.xml             # Parent Aggregator POM (claims-automation-parent)
+│   ├── automation-core/    # Core Framework Library (claims-automation-core)
+│   │   ├── pom.xml
+│   │   └── src/main/java/com/qualityarchitect/core/
+│   │       ├── reporting/  (ExtentReportManager, ExtentTestListener)
+│   │       ├── retry/      (RetryAnalyzer, AnnotationTransformer)
+│   │       └── utils/      (DatabaseUtil, EmailUtil, DataGeneratorUtil)
+│   ├── api-restassured/    # REST Assured API test suite with JsonPath
+│   │   ├── pom.xml
+│   │   └── src/test/
+│   │       ├── resources/  (testng.xml, testng-smoke.xml, testdata/)
+│   │       └── java/com/qualityarchitect/api/tests/ (BaseApiTest, ClaimsApiTest)
+│   └── ui-selenium/        # Selenium WebDriver UI test suite (PageFactory + DriverFactory)
+│       ├── pom.xml
+│       └── src/test/
+│           ├── resources/  (testng.xml, testng-smoke.xml, testng-crossbrowser.xml)
+│           └── java/com/qualityarchitect/ui/
+│               ├── driver/ (DriverFactory, WebDriverProvider)
+│               ├── pages/  (ClaimsPage)
+│               ├── utils/  (ScreenshotUtil)
+│               └── tests/  (BaseUiTest, ClaimsUiTest)
+└── video/
+    └── README.md           # Demo walkthrough recording details
+```
+
+---
+
+## 🚀 Quick Start & Test Execution
+
+### 1. Start the Demo Application
+```powershell
+cd demo-app
+pip install -r requirements.txt
+uvicorn app:app --host 0.0.0.0 --port 8000 --reload
+```
+Open **`http://localhost:8000`** in your browser to access the claims portal.
+
+---
+
+### 2. Execute API Automation Suite (REST Assured)
+In a new terminal window:
+```powershell
+cd automation/api-restassured
+mvn test
+```
+
+---
+
+### 3. Execute UI Automation Suite (Selenium)
+In a new terminal window:
+```powershell
+cd automation/ui-selenium
+mvn test
+```
+
+> **Note**: Selenium Manager automatically provisions the appropriate browser driver. Set the `BASE_URL` environment variable if testing against a remote or alternative port (e.g. `$env:BASE_URL="http://localhost:8000"`).
+
+---
+
+### 4. 📈 Business & Stakeholder Test Reports (ExtentReports 5.x)
+After test execution, interactive and business-friendly HTML reports with metrics, pass/fail statuses, parameters, and failure screenshots are available at:
+
+- **API Test Report**: `automation/api-restassured/target/extent-reports/ExtentReport.html`
+- **UI Test Report**: `automation/ui-selenium/target/extent-reports/ExtentReport.html`
+
+To open the report in your browser (Windows PowerShell):
+```powershell
+# Open API Report
+Start-Process automation/api-restassured/target/extent-reports/ExtentReport.html
+
+# Open UI Report
+Start-Process automation/ui-selenium/target/extent-reports/ExtentReport.html
+```
+
+---
+
+## 📊 Key Highlights for Test Architect Evaluation
+
+1. **Risk-Driven Prioritization**: Mathematical risk modeling prioritizing P0 calculation engine and third-party integrations (responsible for 50% of prod incidents).
+2. **Dynamic JSON Payload Handling**: Separation of test data templates using Jayway JsonPath `DocumentContext` for positive, boundary, and negative testing without hardcoded strings.
+3. **PageFactory & Explicit Synchronization**: Modern POM pattern using `@FindBy` annotations and dynamic `WebDriverWait` explicit conditions.
+4. **Thread-Safe Parallel Execution**: Multi-threaded test runs (`parallel="methods"`) with `ThreadLocal<WebDriver>` session isolation.
+5. **Dynamic Flaky Test Retry**: Zero-configuration retry mechanism powered by `IRetryAnalyzer` + `IAnnotationTransformer`.
+6. **Executive Business Reporting**: Interactive ExtentReports 5.x with metrics and embedded UI failure screenshots.
+7. **Clean Code & Conventions**: 100% adherence to standard Java `camelCase` method conventions and multi-stage CI automation.
