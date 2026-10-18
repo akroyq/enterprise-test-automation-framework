@@ -20,24 +20,37 @@ This document outlines the standard Continuous Integration and Continuous Delive
 
 ## 2. 🔀 Branching Strategy & Git Workflow Governance
 
-To ensure trunk stability and continuous release readiness, the repository follows a **Trunk-Based Development** model with short-lived feature branches:
+To ensure trunk stability and continuous release readiness across dual cloud environments, the repository follows the industry-standard **Environment Branching Strategy** (Feature ➔ QA ➔ Main):
 
 ```
-feature/claim-calculation-fix ───► Pull Request ───► [Stage 1-5 CI Gates] ───► Merge into 'main'
-                                                           │
-                                                           ▼ (If Any Gate Fails)
-                                                     ❌ Merge Blocked
+feature/claim-fix ───► PR into 'qa' ───► [CI Gates] ───► Merge into 'qa' (Auto-Deploy QA)
+                                                                 │
+                                                      [QA Regression / Sign-Off]
+                                                                 │
+                                                                 ▼
+                                         PR into 'main' ───► [Human Gate] ───► Production Deploy
 ```
 
-### Pull Request & Merge Policies:
-* **Branch Protection Rules on `main`**:
-  * Direct pushes to `main` are restricted in production teams.
-  * Require Pull Request with at least 1 peer code review.
-  * Require all status checks to pass before merging:
-    * `Stage 1: Build & Verify Modules`
-    * `Stage 2 & 3: API Test Suite (REST Assured)`
-    * `Stage 4: UI Headless Suite (Selenium 4)`
-    * `Stage 5: Quality Gate Enforcement Verdict`
+### 1. Branch Roles & Environment Mapping
+| Branch | Role | Environment URL | Auto-Deploy? |
+| :--- | :--- | :--- | :--- |
+| `feature/*`, `bugfix/*` | Day-to-day developer work branches | Local / In-runner | No |
+| `qa` | Staging / SIT testing branch | `https://insurance-claims-demo.onrender.com` | **Yes (on merge to `qa`)** |
+| `main` | Production release candidate | `https://insurance-claims-prod.onrender.com` | **Manual Approval / Tag Gate** |
+| `hotfix/*` | Critical production emergencies (branched from `main`) | Verified on QA, merged to `main` + `qa` | Controlled |
+
+### 2. Pull Request & Merge Policies:
+* **Pull Requests to `qa`**:
+  * Developers branch from `qa` (`git checkout -b feature/xyz qa`).
+  * PR targets `qa` branch.
+  * All 5 CI Pipeline stages (`ci.yml`) must pass with 100% test success rate.
+  * Peer review approval required before merging.
+  * On merge: Render automatically deploys code to the dedicated QA server.
+* **Pull Requests from `qa` to `main` (Production Promotion)**:
+  * Triggered only after QA Lead / Test Lead grants QA Sign-Off.
+  * PR is opened from `qa` into `main`.
+  * Merging to `main` triggers `release-production.yml` requiring Human Authorization (`APPROVE_PRODUCTION_DEPLOYMENT`).
+  * Post-deploy live smoke sanity gate verifies production health.
 * **Commit Message Standard**:
   * Adhere to Conventional Commits: `feat:`, `fix:`, `test:`, `refactor:`, `chore:`, `ci:`.
 

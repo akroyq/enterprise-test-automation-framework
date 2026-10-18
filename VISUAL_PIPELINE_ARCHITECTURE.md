@@ -20,22 +20,22 @@ flowchart TD
     %% Lane 1: Development
     subgraph LANE1 ["💻 1. DEVELOPER WORKSPACE"]
         DEV_CODE["Feature Branch: feature/claim-fix<br/>• Writes Code in demo-app/ or automation/<br/>• Runs Local Pre-Flight: mvn test-compile"]:::dev
-        PUSH_PR["git push & Open Pull Request<br/>(feature/claim-fix ➔ main)"]:::dev
+        PUSH_PR["git push & Open Pull Request<br/>(feature/claim-fix ➔ qa branch)"]:::dev
     end
 
     %% Lane 2: PR Gating
     subgraph LANE2 ["⚡ 2. PRE-MERGE QUALITY GATE (GitHub Actions CI)"]
         PR_BUILD["Stage 1: Build Verification<br/>• Java 17 compile across all 3 modules"]:::pr
-        PR_EPHEMERAL["Stage 2 & 3: Ephemeral Runner<br/>• Runs FastAPI in-runner (localhost:8000)<br/>• REST Assured API Suite (P0 Gate)"]:::pr
+        PR_EPHEMERAL["Stage 2 & 3: Fast Gate<br/>• Runs FastAPI in-runner (localhost:8000)<br/>• REST Assured API Suite (P0 Gate)"]:::pr
         PR_UI["Stage 4: Headless Selenium UI<br/>• Headless Chrome E2E Journeys"]:::pr
         PR_VERDICT{"Stage 5: Quality Gate<br/>100% Pass Rate?"}:::gate
         PR_BLOCKED["❌ MERGE BLOCKED<br/>Defect Caught Before Merge!"]:::failure
-        PR_MERGE["✅ PR APPROVED<br/>Merge into 'main' Allowed"]:::qa
+        PR_MERGE["✅ PR APPROVED<br/>Merge into 'qa' Allowed"]:::qa
     end
 
     %% Lane 3: Dedicated QA
     subgraph LANE3 ["🧪 3. DEDICATED QA ENVIRONMENT (Render.com)"]
-        QA_DEPLOY["🚀 Auto-Deploy to QA Server<br/>https://insurance-claims-demo.onrender.com"]:::qa
+        QA_DEPLOY["🚀 Auto-Deploy to QA Server<br/>Branch: 'qa'<br/>https://insurance-claims-demo.onrender.com"]:::qa
         QA_WAKE["Automatic Server Wake-up<br/>Polls /docs until 200 OK"]:::qa
         QA_SUITE["🔬 Live QA Regression Suite<br/>• REST Assured API Boundary Tests<br/>• Selenium Headless UI Journeys"]:::qa
         QA_REPORT["📊 ExtentReports 5.x HTML Published<br/>Retained 14 Days in CI Artifacts"]:::qa
@@ -44,10 +44,11 @@ flowchart TD
 
     %% Lane 4: Production
     subgraph LANE4 ["🚀 4. DEDICATED PRODUCTION ENVIRONMENT (Render.com)"]
-        PROD_TRIGGER["Trigger Production Release<br/>• Push Tag: git tag v1.0.0 OR<br/>• 1-Click UI: release-production.yml"]:::prod
+        PROD_PR["Open PR: 'qa' ➔ 'main'<br/>(Release Candidate Sign-Off)"]:::prod
+        PROD_TRIGGER["Trigger Production Release Pipeline<br/>• Push Tag: git tag v1.0.0 OR<br/>• 1-Click UI: release-production.yml"]:::prod
         PROD_GATE1["Stage 1: QA Pre-Flight Check<br/>Validates 100% Pass on QA first"]:::prod
         PROD_HUMAN_GATE{"🛑 HUMAN MANUAL APPROVAL<br/>QA Lead / Release Manager Sign-off<br/>Approve and Deploy?"}:::gate
-        PROD_DEPLOY["Stage 2: Live Production Deploy<br/>https://insurance-claims-prod.onrender.com"]:::prod
+        PROD_DEPLOY["Stage 2: Live Production Deploy<br/>Branch: 'main'<br/>https://insurance-claims-prod.onrender.com"]:::prod
         PROD_SMOKE["Stage 3: Live Smoke Sanity Gate<br/>• Critical API calculation check<br/>• Live Production homepage & journeys"]:::prod
         PROD_LIVE["🎉 PRODUCTION LIVE & VERIFIED!<br/>Zero-Defect Release Sign-Off (30-day Reports)"]:::prod
     end
@@ -62,13 +63,14 @@ flowchart TD
     PR_VERDICT -->|No / Regression| PR_BLOCKED
     PR_VERDICT -->|Yes / 0 Defects| PR_MERGE
 
-    PR_MERGE -->|Merge to 'main'| QA_DEPLOY
+    PR_MERGE -->|Merge to 'qa'| QA_DEPLOY
     QA_DEPLOY --> QA_WAKE
     QA_WAKE --> QA_SUITE
     QA_SUITE --> QA_REPORT
     QA_REPORT -.-> NIGHTLY_CRON
 
-    QA_REPORT ==>|QA Lead Sign-Off| PROD_TRIGGER
+    QA_REPORT ==>|QA Sign-Off: Create PR| PROD_PR
+    PROD_PR -->|Merge into 'main'| PROD_TRIGGER
     PROD_TRIGGER --> PROD_GATE1
     PROD_GATE1 --> PROD_HUMAN_GATE
     PROD_HUMAN_GATE -->|Approved by Human| PROD_DEPLOY
@@ -89,16 +91,16 @@ sequenceDiagram
     actor Dev as 👨‍💻 Developer
     participant Git as 🐙 GitHub (Repo & PR)
     participant CI as ⚙️ GitHub Actions CI
-    participant QA as 🧪 Render QA Server (Demo)
-    participant Prod as 🚀 Render Prod Server (Prod)
-    actor Lead as 👔 QA Lead / Stakeholders
+    participant QA as 🧪 Render QA Server (Branch: qa)
+    participant Prod as 🚀 Render Prod Server (Branch: main)
+    actor Lead as 👔 QA Lead / Release Manager
 
-    %% Step 1: Branch & PR
+    %% Step 1: Branch & PR to QA
     rect rgb(238, 246, 255)
-    Note over Dev,CI: PHASE 1: Feature Branch & PR Quality Gate
+    Note over Dev,CI: PHASE 1: Feature Branch & PR to 'qa' Quality Gate
     Dev->>Git: git push origin feature/claim-fix
-    Dev->>Git: Open Pull Request to 'main'
-    Git->>CI: Trigger 'Enterprise Quality CI/CD' (PR Event)
+    Dev->>Git: Open Pull Request (feature/claim-fix ➔ 'qa')
+    Git->>CI: Trigger 'Enterprise Quality CI/CD' (PR to qa Event)
     CI->>CI: Compile Java 17 Parent & Modules
     CI->>CI: Start in-runner FastAPI (localhost:8000)
     CI->>CI: Run REST Assured API Tests
@@ -106,13 +108,13 @@ sequenceDiagram
     CI-->>Git: Post PR Summary: ✅ ALL GATES PASSED
     end
 
-    %% Step 2: Merge & QA Deployment
+    %% Step 2: Merge to QA & Dedicated QA Deployment
     rect rgb(235, 253, 240)
-    Note over Git,QA: PHASE 2: Merge to Main & Dedicated QA Verification
-    Dev->>Git: Click 'Merge Pull Request' into 'main'
-    Git->>QA: GitHub Webhook ➔ Trigger Auto-Deploy
+    Note over Git,QA: PHASE 2: Merge into 'qa' & Auto-Deploy to QA Environment
+    Dev->>Git: Click 'Merge Pull Request' into 'qa'
+    Git->>QA: GitHub Webhook ➔ Trigger Auto-Deploy on branch 'qa'
     QA->>QA: pip install -r requirements.txt & uvicorn app:app
-    Git->>CI: Trigger Post-Merge CI Pipeline
+    Git->>CI: Trigger Post-Merge CI Pipeline on 'qa'
     CI->>QA: Active Ping https://insurance-claims-demo.onrender.com/docs
     QA-->>CI: 200 OK (QA Server Awake & Healthy)
     CI->>QA: Run Full REST Assured API Suite on Live QA
@@ -121,14 +123,18 @@ sequenceDiagram
     Lead-->>Dev: QA Sign-off Granted! Ready for Production.
     end
 
-    %% Step 3: Production Release
+    %% Step 3: Promote to Main & Production Release
     rect rgb(250, 245, 255)
-    Note over Lead,Prod: PHASE 3: Production Promotion & Smoke Sanity Gate
-    Lead->>CI: Trigger 'release-production.yml' (Tag: v1.0.0)
+    Note over Lead,Prod: PHASE 3: Promote 'qa' ➔ 'main' & Production Release Gate
+    Lead->>Git: Open Pull Request: 'qa' ➔ 'main'
+    Lead->>Git: Merge PR into 'main'
+    Lead->>CI: Trigger 'release-production.yml' (Workflow or Tag: v1.0.0)
     CI->>QA: Re-verify 100% P0 tests on QA (Pre-Flight)
     QA-->>CI: Confirmed 100% Pass
+    CI->>Lead: Prompt for Human Manual Approval
+    Lead->>CI: Type APPROVE_PRODUCTION_DEPLOYMENT
     CI->>Prod: Deploy Release Artifact to https://insurance-claims-prod.onrender.com
-    Prod->>Prod: Start Production Service
+    Prod->>Prod: Start Production Service (Branch: main)
     CI->>Prod: Poll https://insurance-claims-prod.onrender.com/docs
     Prod-->>CI: 200 OK (Production Online)
     CI->>Prod: Execute Production Smoke Tests (testng-smoke.xml)
@@ -143,10 +149,11 @@ sequenceDiagram
 
 | Metric | 🧪 Dedicated QA Environment | 🚀 Dedicated Production Environment |
 | :--- | :--- | :--- |
+| **Tracked Git Branch** | `qa` | `main` |
 | **Live Web URL** | [https://insurance-claims-demo.onrender.com](https://insurance-claims-demo.onrender.com) | [https://insurance-claims-prod.onrender.com](https://insurance-claims-prod.onrender.com) |
 | **API Docs (Swagger)** | `/docs` | `/docs` |
 | **Target Audience** | QA Engineers, Developers, Automation Suites | Real End Users, Live Insurance Claims |
-| **Deploy Mechanism** | Continuous Auto-deploy on merge to `main` | Controlled Release Tag (`v*.*.*`) / Manual Approval |
+| **Deploy Mechanism** | Continuous Auto-deploy on merge to `qa` branch | Controlled Release Tag (`v*.*.*`) / PR to `main` with Human Approval |
 | **Active Pipelines** | `ci.yml` & `nightly-crossbrowser.yml` | `release-production.yml` |
 | **Automated Test Scope**| 100% P0/P1 Calculation, Boundary & UI Regressions | Critical Path Smoke Tests (`testng-smoke.xml`) |
 | **Report Retention** | 14 Days (ExtentReports HTML Spark) | 30 Days (Release Sign-off Dashboards) |
@@ -157,10 +164,11 @@ sequenceDiagram
 
 ```
                 ┌────────────────────────────────────────────────────────┐
-                │             THE GOLDEN 3-STAGE QUALITY RULE            │
+                │          ENTERPRISE BRANCH & GATE HIERARCHY            │
                 ├────────────────────────────────────────────────────────┤
-                │ 1. PR Branch Gate  ➔ Protects the 'main' branch        │
-                │ 2. Live QA Gate    ➔ Validates System Integration (SIT)│
-                │ 3. Prod Smoke Gate ➔ Confirms Safe Customer Release    │
+                │ 1. feature/* ➔ PR to 'qa'   (In-Runner Test Gate)     │
+                │ 2. Merge to 'qa'            (Auto-Deploy QA & Test)    │
+                │ 3. PR 'qa' ➔ 'main'         (Human Approval Gate)      │
+                │ 4. Deploy 'main' to Prod    (Live Smoke Sanity Gate)   │
                 └────────────────────────────────────────────────────────┘
 ```

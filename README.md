@@ -126,7 +126,7 @@ Start-Process automation/ui-selenium/target/extent-reports/ExtentReport.html
 ### 5. 🔄 Continuous Integration & Quality Gates (GitHub Actions)
 The repository enforces Quality Gates across automated GitHub Actions workflows:
 
-1. **Pull Request & Main Branch CI (`.github/workflows/ci.yml`)**:
+1. **Pull Request, QA & Main Branch CI (`.github/workflows/ci.yml`)**:
    - **Stage 1 (Build & Verification)**: Java 17 compile across all parent & child modules with Maven dependency caching.
    - **Stage 2 (Service Spin-up & Health Check)**: FastAPI claims backend launched with non-blocking polling health checks on `http://127.0.0.1:8000/docs`.
    - **Stage 3 (API REST Assured Gate)**: 100% calculation and boundary tests executed. **Blocking Gate**: 0 defects allowed.

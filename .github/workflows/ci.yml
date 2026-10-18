@@ -15,9 +15,9 @@ name: Enterprise Quality CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, qa ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main, master, qa ]
   workflow_dispatch:
     inputs:
       target_env_url:
