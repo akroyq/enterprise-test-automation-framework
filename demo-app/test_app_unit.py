@@ -24,12 +24,13 @@ def test_home_page_returns_html():
     assert "<form id=\"claim-form\"" in response.text
 
 def test_create_claim_success():
-    """Verify valid claim submission returns HTTP 201 with SUBMITTED status."""
+    """Verify valid claim submission returns HTTP 201 with SUBMITTED status and custom claim_description."""
     payload = {
         "policy_id": "POL-UNIT-001",
         "product": "Auto Collision",
         "claim_amount": 2500.0,
-        "deductible": 500.0
+        "deductible": 500.0,
+        "claim_description": "Windshield crack on highway"
     }
     response = client.post("/claims", json=payload)
     assert response.status_code == 201
@@ -41,6 +42,20 @@ def test_create_claim_success():
     assert data["claim_amount"] == 2500.0
     assert data["deductible"] == 500.0
     assert data["status"] == "SUBMITTED"
+    assert data["claim_description"] == "Windshield crack on highway"
+
+def test_create_claim_default_claim_description():
+    """Verify default claim_description is applied when omitted."""
+    payload = {
+        "policy_id": "POL-UNIT-002",
+        "product": "Homeowners",
+        "claim_amount": 1000.0,
+        "deductible": 100.0
+    }
+    response = client.post("/claims", json=payload)
+    assert response.status_code == 201
+    data = response.json()
+    assert data["claim_description"] == "Standard claim request"
 
 def test_create_claim_validation_negative_claim_amount():
     """Verify validation failure (422) when claim_amount is negative."""
