@@ -22,6 +22,8 @@ This repository contains the end-to-end Quality Architecture, Risk-Based Test St
 ```
 submission/
 ├── CASE_STUDY.md           # Enterprise Risk-Based Strategy & Quality Architecture
+├── STRATEGY_DOCUMENT.md    # Master Risk-Driven Quality Architecture Strategy
+├── CICD_PIPELINE_GUIDE.md  # Standard Operating Procedure & CI/CD Architecture Guide
 ├── README.md               # Quick start guide & architectural overview
 ├── .github/
 │   └── workflows/
