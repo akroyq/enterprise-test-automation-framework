@@ -13,7 +13,6 @@ class ClaimCreate(BaseModel):
     claim_amount: float = Field(ge=0)
     deductible: float = Field(ge=0)
     incident_description: Optional[str] = Field(default="Standard claim submission", max_length=200)
-    claimant_email: Optional[str] = Field(default="claimant@example.com", max_length=100)
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -229,10 +228,7 @@ def home():
         <input id="incident-description" name="incident_description" aria-label="Incident Description" placeholder="e.g. Minor car collision at intersection" />
       </div>
 
-      <div class="form-group">
-        <label for="claimant-email">Claimant Email <span style="font-size:0.75rem; color:#2563eb; font-weight:normal;">(New QA Field #2)</span></label>
-        <input id="claimant-email" type="email" name="claimant_email" aria-label="Claimant Email" placeholder="e.g. claimant@claims.com" />
-      </div>
+
 
       <button id="submit-claim" class="btn btn-primary" type="submit">Submit claim</button>
     </form>
@@ -246,10 +242,7 @@ def home():
         <span class="result-label">Status:</span>
         <span id="claim-status" class="result-value badge" data-testid="claim-status"></span>
       </div>
-      <div class="result-row">
-        <span class="result-label">Email:</span>
-        <span id="claim-email" class="result-value" data-testid="claim-email">-</span>
-      </div>
+
       <div class="result-row">
         <span class="result-label">Description:</span>
         <span id="claim-desc" class="result-value" data-testid="claim-desc">-</span>
@@ -277,8 +270,7 @@ def home():
         product: byId('product').value,
         claim_amount: Number(byId('claim-amount').value),
         deductible: Number(byId('deductible').value),
-        incident_description: byId('incident-description').value || undefined,
-        claimant_email: byId('claimant-email').value || undefined
+        incident_description: byId('incident-description').value || undefined
       };
       
       try {
@@ -296,7 +288,6 @@ def home():
         byId('claim-id').textContent = data.id;
         byId('claim-status').textContent = data.status;
         byId('claim-desc').textContent = data.incident_description || 'Standard claim submission';
-        byId('claim-email').textContent = data.claimant_email || 'claimant@example.com';
       } catch (err) {
         byId('message').textContent = 'Network error occurred';
       }
