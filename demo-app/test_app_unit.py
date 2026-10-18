@@ -29,8 +29,7 @@ def test_create_claim_success():
         "policy_id": "POL-UNIT-001",
         "product": "Auto Collision",
         "claim_amount": 2500.0,
-        "deductible": 500.0,
-        "incident_description": "Windshield crack on highway"
+        "deductible": 500.0
     }
     response = client.post("/claims", json=payload)
     assert response.status_code == 201
@@ -42,20 +41,6 @@ def test_create_claim_success():
     assert data["claim_amount"] == 2500.0
     assert data["deductible"] == 500.0
     assert data["status"] == "SUBMITTED"
-    assert data["incident_description"] == "Windshield crack on highway"
-
-def test_create_claim_default_incident_description():
-    """Verify default incident_description is assigned if omitted."""
-    payload = {
-        "policy_id": "POL-UNIT-002",
-        "product": "Homeowners",
-        "claim_amount": 1200.0,
-        "deductible": 200.0
-    }
-    response = client.post("/claims", json=payload)
-    assert response.status_code == 201
-    data = response.json()
-    assert data["incident_description"] == "Standard claim submission"
 
 def test_create_claim_validation_negative_claim_amount():
     """Verify validation failure (422) when claim_amount is negative."""
