@@ -1,30 +1,16 @@
 # ==============================================================================
-# GitHub Actions Pipeline: Nightly Cross-Browser Regression Gate
+# GitHub Actions Pipeline: Nightly Cross-Browser Regression Gate (Live QA)
 # ==============================================================================
-# Purpose:
-#   As defined in Quality Architecture Strategy Document (Section 8.1), this
-#   pipeline executes automated cross-browser UI regression tests across multiple
-#   browsers (Google Chrome and Mozilla Firefox) in parallel.
-#
-# Key Highlights:
-#   - Scheduled Execution: Runs automatically every night at 00:00 UTC (cron).
-#   - On-Demand Execution: Can be manually triggered with custom TestNG suite selection.
-#   - Matrix Strategy: Parallel test execution across browser environments.
-#   - Reporting: Generates and archives browser-specific ExtentReports 5.x Spark HTML.
+# Executes automated cross-browser UI regression tests across multiple browsers
+# (Google Chrome and Mozilla Firefox) against the Live QA Environment.
 # ==============================================================================
 
 name: Nightly Cross-Browser Regression Gate
 
-# ------------------------------------------------------------------------------
-# Trigger Conditions
-# ------------------------------------------------------------------------------
 on:
-  # Scheduled Trigger: Runs automatically at midnight UTC (00:00 UTC) every single day
   schedule:
+    # Runs at 00:00 UTC every day
     - cron: '0 0 * * *'
-
-  # Manual Trigger: Enables team members to trigger cross-browser runs on-demand
-  # with configurable suite selection from the GitHub Actions web UI
   workflow_dispatch:
     inputs:
       test_suite:
@@ -36,39 +22,32 @@ on:
           - 'src/test/resources/testng-crossbrowser.xml'
           - 'src/test/resources/testng.xml'
           - 'src/test/resources/testng-smoke.xml'
+      target_env_url:
+        description: 'Target QA Environment URL (Leave empty for default QA URL)'
+        required: false
+        default: ''
 
-# ------------------------------------------------------------------------------
-# Concurrency Management
-# ------------------------------------------------------------------------------
-# Prevent redundant concurrent nightly runs from consuming overlapping runner hours
 concurrency:
   group: nightly-crossbrowser-${{ github.ref }}
   cancel-in-progress: true
 
+env:
+  DEFAULT_QA_URL: "https://insurance-claims-demo.onrender.com"
+  ENV_NAME: "QA"
+
 jobs:
-  # ============================================================================
-  # Cross-Browser Execution Job (Matrix Strategy)
-  # ============================================================================
-  # GitHub Actions spawns parallel runner jobs for each entry in the browser matrix:
-  #   - Job 1: Headless Google Chrome
-  #   - Job 2: Headless Mozilla Firefox
-  # fail-fast: false ensures that if one browser fails, the other browser completes
-  # its full regression run so we get complete diagnostic data across both platforms.
-  # ============================================================================
   cross-browser-matrix:
-    name: "Cross-Browser: ${{ matrix.browser }}"
+    name: "Cross-Browser [QA]: ${{ matrix.browser }}"
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false # Do not abort other browsers if one encounters a test failure
+      fail-fast: false
       matrix:
-        browser: [chrome, firefox] # Test matrix: Chrome & Firefox on Ubuntu runners
+        browser: [chrome, firefox]
 
     steps:
-      # Step 1: Checkout the source code from the repository
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Step 2: Set up Java 17 JDK (Temurin) and enable Maven caching
       - name: Set up Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -76,60 +55,57 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      # Step 3: Set up Python 3.12 environment with pip package caching
-      - name: Set up Python 3.12
+      - name: Set up Python 3.12 (For health check & fallback service)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: demo-app/requirements.txt
 
-      # Step 4: Install FastAPI and application dependencies
       - name: Install Application Dependencies
         run: pip install -r demo-app/requirements.txt
 
-      # Step 5: Launch FastAPI Claims portal backend in background mode
-      # '--app-dir demo-app' ensures module path is resolved properly by Uvicorn
-      - name: Start FastAPI Demo Application
+      - name: Resolve Live QA Target Environment
+        id: resolve-qa
         run: |
-          nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
-          echo "FastAPI background PID: $!"
-
-      # Step 6: Active polling health check loop
-      # Confirms backend readiness before starting browser automation
-      - name: Verify Service Health Check
-        run: |
-          echo "Waiting for FastAPI service to become healthy..."
+          QA_URL="${{ github.event.inputs.target_env_url || vars.QA_BASE_URL || secrets.QA_BASE_URL || env.DEFAULT_QA_URL }}"
+          echo "TARGET_QA_URL=$QA_URL" >> $GITHUB_ENV
+          
           python -c "
-          import urllib.request, time, sys
-          for attempt in range(30):
-              try:
-                  with urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=2) as response:
-                      if response.status == 200:
-                          print(f'Service ready on attempt {attempt+1}.')
-                          sys.exit(0)
-              except Exception:
-                  time.sleep(1)
-          print('Service failed to respond within timeout.')
-          sys.exit(1)
-          "
+          import urllib.request, time, sys, os
+          qa_url = os.environ.get('TARGET_QA_URL', 'https://insurance-claims-demo.onrender.com').rstrip('/')
+          try:
+              req = urllib.request.Request(f'{qa_url}/docs', headers={'User-Agent': 'CI-HealthCheck-Bot/1.0'})
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  if resp.status == 200:
+                      print(f'✅ Live QA Environment ready: {qa_url}')
+                      sys.exit(0)
+          except Exception as e:
+              print(f'Remote QA unavailable: {e}')
+              sys.exit(2)
+          " || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 2 ]; then
+              echo "Starting local fallback FastAPI instance on port 8000..."
+              nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+              sleep 3
+              echo "TARGET_QA_URL=http://localhost:8000" >> $GITHUB_ENV
+            else
+              exit 1
+            fi
+          }
 
-      # Step 7: Execute Selenium UI Tests on current matrix browser
-      # -DsuiteXmlFile allows dynamic suite selection (defaults to testng-crossbrowser.xml)
-      # -Dbrowser passes the targeted browser to DriverFactory (chrome or firefox)
-      # HEADLESS: 'true' ensures execution on headless Linux display
-      - name: Execute UI Suite on ${{ matrix.browser }}
+      - name: Execute UI Suite on ${{ matrix.browser }} (Live QA)
         env:
-          BASE_URL: "http://localhost:8000"
+          BASE_URL: ${{ env.TARGET_QA_URL }}
           BROWSER: ${{ matrix.browser }}
           HEADLESS: "true"
-          ENV: "Nightly-CI"
+          ENV: "QA"
         run: |
           SUITE_FILE="${{ github.event.inputs.test_suite || 'src/test/resources/testng-crossbrowser.xml' }}"
+          echo "Executing on ${{ matrix.browser }} against Live QA: $BASE_URL"
           mvn test -B -f automation/pom.xml -pl ui-selenium -am -DsuiteXmlFile="$SUITE_FILE" -Dbrowser=${{ matrix.browser }}
 
-      # Step 8: Upload browser-specific test artifacts (ExtentReports HTML, Screenshots, Surefire XML)
-      # if: always() guarantees logs are preserved even on assertion failures
       - name: Upload Cross-Browser Reports (${{ matrix.browser }})
         if: always()
         uses: actions/upload-artifact@v4
@@ -141,13 +117,13 @@ jobs:
             automation/ui-selenium/target/screenshots/
           retention-days: 14
 
-      # Step 9: Render browser status card to GitHub Actions Step Summary
       - name: Publish Matrix Step Summary
         if: always()
         run: |
           echo "### 🌐 Browser Regression: ${{ matrix.browser }}" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Environment** | QA (${{ env.TARGET_QA_URL }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Browser** | ${{ matrix.browser }} (Headless) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Status** | ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Reports** | Spark HTML ExtentReports attached in artifacts |" >> $GITHUB_STEP_SUMMARY

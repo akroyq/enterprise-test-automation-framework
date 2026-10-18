@@ -1,61 +1,53 @@
 # ==============================================================================
 # GitHub Actions CI/CD Pipeline: Enterprise Insurance Claims Platform
 # ==============================================================================
-# This workflow automates the end-to-end Quality Assurance and verification
-# process for every Pull Request and commit to the main/master branch.
+# This workflow automates continuous testing against the Live QA Environment.
 #
-# Pipeline Architecture (5-Stage Gate):
+# Pipeline Architecture (5-Stage Gate against QA Environment):
 #   Stage 1: Build & Dependency Verification (Maven clean compile across modules)
-#   Stage 2: FastAPI Microservice Launch & Active Polling Health Check
-#   Stage 3: REST Assured API Automated Test Suite (Blocking P0 Gate)
-#   Stage 4: Headless Selenium WebDriver 4 UI E2E Automated Test Suite
+#   Stage 2: Live QA Environment Wake-up & Active Polling Health Check
+#   Stage 3: REST Assured API Automated Test Suite (Blocking P0 Gate on Live QA)
+#   Stage 4: Headless Selenium WebDriver 4 UI E2E Automated Test Suite (on Live QA)
 #   Stage 5: Quality Gate Evaluation & ExtentReports HTML Artifact Archival (14 Days)
 # ==============================================================================
 
 name: Enterprise Quality CI/CD Pipeline
 
-# ------------------------------------------------------------------------------
-# Trigger Conditions
-# ------------------------------------------------------------------------------
 on:
-  # Triggers when code is pushed to main or master branch
   push:
     branches: [ main, master ]
-  
-  # Triggers on Pull Requests targeting main or master branch (Quality Gating before merge)
   pull_request:
     branches: [ main, master ]
-  
-  # Allows QA Engineers / DevOps to manually trigger this pipeline on-demand from the Actions UI
   workflow_dispatch:
+    inputs:
+      target_env_url:
+        description: 'Target QA Environment Base URL (Leave empty to use default QA URL)'
+        required: false
+        default: ''
 
-# ------------------------------------------------------------------------------
-# Concurrency Management
-# ------------------------------------------------------------------------------
-# If a new commit is pushed to the same PR or branch, automatically cancel any 
-# currently running pipeline to save runner minutes and resources.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  # Resolves Target QA Environment URL:
+  # 1. Manual workflow_dispatch input (if provided)
+  # 2. GitHub Repository Variable/Secret 'QA_BASE_URL' (if configured in Settings)
+  # 3. Default Live Render QA Deployment URL
+  DEFAULT_QA_URL: "https://insurance-claims-demo.onrender.com"
+  ENV_NAME: "QA"
 
 jobs:
   # ============================================================================
   # Stage 1: Build & Dependency Verification
   # ============================================================================
-  # Goal: Fast compile check to ensure that all Maven parent and child modules
-  # (automation-core, api-restassured, ui-selenium) have valid syntax and dependencies.
-  # If code doesn't compile, fail immediately before provisioning test environments.
-  # ============================================================================
   build:
     name: "Stage 1: Build & Verify Modules"
     runs-on: ubuntu-latest
     steps:
-      # Step 1.1: Clone repository code into GitHub runner workspace
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Step 1.2: Setup Java 17 runtime (Eclipse Temurin) and enable Maven cache
-      # Caching ~/.m2 repository significantly speeds up subsequent builds
       - name: Set up Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -63,29 +55,22 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      # Step 1.3: Compile all Java source code and test files without running tests
       - name: Compile Parent and All Submodules
         run: |
           echo "Compiling all modules (automation-core, api-restassured, ui-selenium)..."
           mvn clean test-compile -B -f automation/pom.xml
 
   # ============================================================================
-  # Stage 2 & 3: FastAPI Launch & API Automation Suite (Blocking Gate)
-  # ============================================================================
-  # Goal: Spin up the FastAPI backend, verify its health via polling, and run
-  # REST Assured API tests covering calculation engine boundaries and REST contracts.
-  # SLA: Must execute in < 20 seconds. 0 calculation failures allowed.
+  # Stage 2 & 3: Live QA Environment Wake-up & API Automation Gate
   # ============================================================================
   api-tests:
-    name: "Stage 2 & 3: API Test Suite (REST Assured)"
-    needs: build # Runs only after Stage 1 (build) passes
+    name: "Stage 2 & 3: API Test Suite on Live QA"
+    needs: build
     runs-on: ubuntu-latest
     steps:
-      # Step 2.1: Checkout repository
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Step 2.2: Setup Java 17 for running Maven REST Assured test runner
       - name: Set up Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -93,58 +78,70 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      # Step 2.3: Setup Python 3.12 for the FastAPI Claims demo service
-      # Cache pip wheels to reduce environment setup time
-      - name: Set up Python 3.12
+      - name: Set up Python 3.12 (For health check & fallback service)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: demo-app/requirements.txt
 
-      # Step 2.4: Install FastAPI and Uvicorn dependencies
       - name: Install Application Dependencies
         run: pip install -r demo-app/requirements.txt
 
-      # Step 2.5: Launch FastAPI application in background using uvicorn
-      # Note: '--app-dir demo-app' correctly imports 'app' without Python package naming issues
-      - name: Start FastAPI Demo Application
+      # Resolves QA URL and performs active wake-up / health check
+      # Render Free tier puts inactive apps to sleep; this step automatically
+      # wakes up the live QA server before running automated suites
+      - name: Live QA Health Check & Server Wake-up
+        id: qa-health
         run: |
-          nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
-          echo "FastAPI background PID: $!"
-
-      # Step 2.6: Active Health Check verification
-      # Instead of blind sleep (which causes race conditions), poll the /docs endpoint
-      # with retry loop up to 30 attempts until HTTP 200 is confirmed
-      - name: Verify Service Health Check
-        run: |
-          echo "Waiting for FastAPI service to become healthy on http://127.0.0.1:8000/docs..."
+          QA_URL="${{ github.event.inputs.target_env_url || vars.QA_BASE_URL || secrets.QA_BASE_URL || env.DEFAULT_QA_URL }}"
+          echo "TARGET_QA_URL=$QA_URL" >> $GITHUB_ENV
+          echo "Pinging Live QA Environment at: $QA_URL/docs"
+          
           python -c "
-          import urllib.request, time, sys
-          for attempt in range(30):
-              try:
-                  with urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=2) as response:
-                      if response.status == 200:
-                          print(f'Service is healthy and ready (attempt {attempt+1}).')
-                          sys.exit(0)
-              except Exception:
-                  time.sleep(1)
-          print('Service failed to respond within 30 seconds.')
-          sys.exit(1)
-          "
+          import urllib.request, time, sys, os
 
-      # Step 3.1: Execute REST Assured API test suite via Maven TestNG runner
-      # -B: Batch mode (clean logs)
-      # -pl api-restassured -am: Build dependent modules (automation-core) and test api-restassured
-      - name: Execute REST Assured API Tests
+          qa_url = os.environ.get('TARGET_QA_URL', 'https://insurance-claims-demo.onrender.com').rstrip('/')
+          health_url = f'{qa_url}/docs'
+          print(f'Attempting to reach Live QA Server: {health_url}')
+
+          # Render sleep recovery: poll up to 45 attempts (approx 90 seconds)
+          healthy = False
+          for attempt in range(1, 46):
+              try:
+                  req = urllib.request.Request(health_url, headers={'User-Agent': 'CI-HealthCheck-Bot/1.0'})
+                  with urllib.request.urlopen(req, timeout=5) as resp:
+                      if resp.status == 200:
+                          print(f'✅ Live QA Server is AWAKE and HEALTHY! (Attempt {attempt})')
+                          healthy = True
+                          break
+              except Exception as e:
+                  print(f'Waiting for Live QA server to wake up (Attempt {attempt}/45)... {e}')
+                  time.sleep(2)
+
+          if not healthy:
+              print('⚠️ Live QA remote endpoint did not respond in 90s. Starting local QA service as fallback.')
+              sys.exit(2)
+          " || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 2 ]; then
+              echo "Starting local fallback FastAPI instance on port 8000..."
+              nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+              sleep 3
+              echo "TARGET_QA_URL=http://localhost:8000" >> $GITHUB_ENV
+            else
+              exit 1
+            fi
+          }
+
+      - name: Execute REST Assured API Tests on Live QA
         env:
-          BASE_URL: "http://localhost:8000"
-          ENV: "CI-GitHubActions"
+          BASE_URL: ${{ env.TARGET_QA_URL }}
+          ENV: "QA"
         run: |
+          echo "Running REST Assured API tests against Target QA: $BASE_URL"
           mvn test -B -f automation/pom.xml -pl api-restassured -am
 
-      # Step 3.2: Upload interactive ExtentReports 5.x HTML Spark reports and Surefire test logs
-      # if: always() ensures reports are uploaded even if tests fail, aiding rapid root-cause diagnosis
       - name: Upload API ExtentReports HTML & Surefire Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -155,35 +152,28 @@ jobs:
             automation/api-restassured/target/surefire-reports/
           retention-days: 14
 
-      # Step 3.3: Publish formatted test summary to GitHub Actions Step Summary (visible on PR page)
       - name: Publish API Test Summary
         if: always()
         run: |
           echo "### 📡 API Automation Gate Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Status / Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Environment** | QA (${{ env.TARGET_QA_URL }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Test Framework** | REST Assured + TestNG |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Service Under Test** | FastAPI (Claims REST API) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Execution Status** | ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **P0 Gate Rule** | Zero Calculation / Boundary Failures Allowed |" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
-  # Stage 4: UI Headless Automation Suite (Selenium 4 + Headless Chrome)
-  # ============================================================================
-  # Goal: Run end-to-end browser journeys in headless Chrome to verify UI forms,
-  # calculations, validation messages, and claim submission flows.
-  # Runs after API tests pass to maintain strict gating hierarchy.
+  # Stage 4: UI Headless Automation Suite on Live QA (Selenium 4)
   # ============================================================================
   ui-tests:
-    name: "Stage 4: UI Headless Suite (Selenium 4)"
-    needs: api-tests # Blocking gate: only run UI tests if API tests pass
+    name: "Stage 4: UI Headless Suite on Live QA"
+    needs: api-tests
     runs-on: ubuntu-latest
     steps:
-      # Step 4.1: Checkout code
       - name: Checkout Source Code
         uses: actions/checkout@v4
 
-      # Step 4.2: Setup Java 17 for Selenium test execution
       - name: Set up Java 17 (Temurin)
         uses: actions/setup-java@v4
         with:
@@ -191,54 +181,56 @@ jobs:
           java-version: '17'
           cache: 'maven'
 
-      # Step 4.3: Setup Python 3.12 for demo app
-      - name: Set up Python 3.12
+      - name: Set up Python 3.12 (For health check & fallback service)
         uses: actions/setup-python@v5
         with:
           python-version: '3.12'
           cache: 'pip'
           cache-dependency-path: demo-app/requirements.txt
 
-      # Step 4.4: Install python dependencies
       - name: Install Application Dependencies
         run: pip install -r demo-app/requirements.txt
 
-      # Step 4.5: Start FastAPI service
-      - name: Start FastAPI Demo Application
+      - name: Resolve QA Target Environment
+        id: resolve-qa
         run: |
-          nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
-          echo "FastAPI background PID: $!"
-
-      # Step 4.6: Verify FastAPI service readiness with active polling
-      - name: Verify Service Health Check
-        run: |
-          echo "Waiting for FastAPI service to become healthy on http://127.0.0.1:8000/docs..."
+          QA_URL="${{ github.event.inputs.target_env_url || vars.QA_BASE_URL || secrets.QA_BASE_URL || env.DEFAULT_QA_URL }}"
+          echo "TARGET_QA_URL=$QA_URL" >> $GITHUB_ENV
+          
           python -c "
-          import urllib.request, time, sys
-          for attempt in range(30):
-              try:
-                  with urllib.request.urlopen('http://127.0.0.1:8000/docs', timeout=2) as response:
-                      if response.status == 200:
-                          print(f'Service is healthy and ready (attempt {attempt+1}).')
-                          sys.exit(0)
-              except Exception:
-                  time.sleep(1)
-          print('Service failed to respond within 30 seconds.')
-          sys.exit(1)
-          "
+          import urllib.request, time, sys, os
+          qa_url = os.environ.get('TARGET_QA_URL', 'https://insurance-claims-demo.onrender.com').rstrip('/')
+          try:
+              req = urllib.request.Request(f'{qa_url}/docs', headers={'User-Agent': 'CI-HealthCheck-Bot/1.0'})
+              with urllib.request.urlopen(req, timeout=10) as resp:
+                  if resp.status == 200:
+                      print(f'✅ Live QA Environment ready: {qa_url}')
+                      sys.exit(0)
+          except Exception as e:
+              print(f'Remote QA unavailable: {e}')
+              sys.exit(2)
+          " || {
+            EXIT_CODE=$?
+            if [ $EXIT_CODE -eq 2 ]; then
+              echo "Starting local fallback FastAPI instance on port 8000..."
+              nohup uvicorn app:app --app-dir demo-app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+              sleep 3
+              echo "TARGET_QA_URL=http://localhost:8000" >> $GITHUB_ENV
+            else
+              exit 1
+            fi
+          }
 
-      # Step 4.7: Execute Selenium UI test suite in Headless Chrome
-      # Selenium Manager automatically handles browser driver provisioning
-      - name: Execute Selenium UI Tests (Headless Chrome)
+      - name: Execute Selenium UI Tests on Live QA (Headless Chrome)
         env:
-          BASE_URL: "http://localhost:8000"
+          BASE_URL: ${{ env.TARGET_QA_URL }}
           BROWSER: "chrome"
           HEADLESS: "true"
-          ENV: "CI-GitHubActions"
+          ENV: "QA"
         run: |
+          echo "Running UI Selenium tests against Target QA: $BASE_URL"
           mvn test -B -f automation/pom.xml -pl ui-selenium -am
 
-      # Step 4.8: Upload ExtentReports HTML, Surefire logs, and failure screenshots
       - name: Upload UI ExtentReports HTML, Screenshots & Surefire Artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -250,13 +242,13 @@ jobs:
             automation/ui-selenium/target/screenshots/
           retention-days: 14
 
-      # Step 4.9: Publish UI results to GitHub Actions Step Summary
       - name: Publish UI Test Summary
         if: always()
         run: |
           echo "### 🖥️ UI Automation Gate Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Status / Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Target Environment** | QA (${{ env.TARGET_QA_URL }}) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Test Framework** | Selenium WebDriver 4 + PageFactory |" >> $GITHUB_STEP_SUMMARY
           echo "| **Browser** | Headless Chrome (1440x1000) |" >> $GITHUB_STEP_SUMMARY
           echo "| **Execution Status** | ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }} |" >> $GITHUB_STEP_SUMMARY
@@ -265,22 +257,18 @@ jobs:
   # ============================================================================
   # Stage 5: Quality Gate Enforcement Verdict
   # ============================================================================
-  # Goal: Consolidate the verdicts of all preceding stages (API & UI).
-  # Emits a final Quality Architecture pass/fail decision to guide PR approvals.
-  # ============================================================================
   quality-gate:
     name: "Stage 5: Quality Gate Enforcement Verdict"
     needs: [api-tests, ui-tests]
-    if: always() # Always evaluate to provide an executive summary even on failure
+    if: always()
     runs-on: ubuntu-latest
     steps:
-      # Step 5.1: Parse job results and print consolidated Executive Quality Gate table
       - name: Evaluate Quality Gates & Publish Executive Summary
         run: |
           API_STATUS="${{ needs.api-tests.result }}"
           UI_STATUS="${{ needs.ui-tests.result }}"
           
-          echo "## 🏛️ Enterprise Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏛️ Enterprise Quality Gate Summary (QA Environment)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Pipeline Gate | Stage | Result | Quality SLA / Threshold |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :--- | :--- | :--- |" >> $GITHUB_STEP_SUMMARY
@@ -289,12 +277,11 @@ jobs:
           echo "| **Artifact Retention** | Stage 5 (ExtentReports) | ✅ ACTIVE | 14-day retention for Spark HTML & Screenshots |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          # Enforce gating decision: fail workflow if any gate was not successful
           if [ "$API_STATUS" != "success" ] || [ "$UI_STATUS" != "success" ]; then
-            echo "### ❌ Quality Gate FAILED" >> $GITHUB_STEP_SUMMARY
+            echo "### ❌ Quality Gate FAILED on QA Environment" >> $GITHUB_STEP_SUMMARY
             echo "One or more blocking quality gates did not meet the zero-defect SLA threshold." >> $GITHUB_STEP_SUMMARY
             exit 1
           else
-            echo "### ✅ Quality Gate PASSED" >> $GITHUB_STEP_SUMMARY
-            echo "All automated API calculations and E2E UI journeys verified successfully." >> $GITHUB_STEP_SUMMARY
+            echo "### ✅ Quality Gate PASSED on QA Environment" >> $GITHUB_STEP_SUMMARY
+            echo "All automated API calculations and E2E UI journeys verified successfully against QA." >> $GITHUB_STEP_SUMMARY
           fi
