@@ -197,6 +197,18 @@ mvn test -f automation/pom.xml -pl api-restassured -am
 mvn test -f automation/pom.xml -pl ui-selenium -am -Dbrowser=chrome -Dheadless=true
 ```
 
+### 7.1 🚀 Production Promotion & Post-Deploy Smoke Gate (`release-production.yml`)
+When code is ready for live customer deployment, the enterprise release pipeline enforces three stages:
+
+1. **Stage 1 (QA Release Sign-off Verification)**:
+   - Validates that the release candidate passes 100% of P0 tests on the QA environment before initiating deployment.
+2. **Stage 2 (Controlled Production Deployment)**:
+   - Deploys the immutable build artifact to Production (supports Render Deploy Hooks and GitHub Environment Protection Rules).
+   - Polls Production `/docs` health check until server is fully awake and responsive.
+3. **Stage 3 (Post-Deployment Smoke Sanity Gate)**:
+   - Executes `testng-smoke.xml` suites (REST Assured and Headless Chrome) against the live Production server.
+   - Archives 30-day retained Production verification ExtentReports and publishes the executive release verdict to `$GITHUB_STEP_SUMMARY`.
+
 ---
 
 ## 8. 🛠️ Developer & QA Standard Operating Procedures (SOP)

@@ -27,8 +27,9 @@ submission/
 ├── README.md               # Quick start guide & architectural overview
 ├── .github/
 │   └── workflows/
-│       ├── ci.yml                  # GitHub Actions multi-stage automated pipeline
-│       └── nightly-crossbrowser.yml # Scheduled cross-browser regression pipeline
+│       ├── ci.yml                   # GitHub Actions multi-stage automated pipeline
+│       ├── nightly-crossbrowser.yml # Scheduled cross-browser regression pipeline
+│       └── release-production.yml   # Production release & post-deploy smoke sanity gate
 ├── agents/                 # AI Agent Artifacts (Section 5B Deliverables)
 │   ├── prompts.md          # Structured prompt engineering catalog
 │   ├── system-instructions.md # Quality Architect persona & constraints
@@ -132,6 +133,12 @@ The repository enforces Quality Gates across automated GitHub Actions workflows:
    - Scheduled nightly at `00:00 UTC` with on-demand `workflow_dispatch` trigger.
    - Matrix execution across **Chrome** and **Firefox** in parallel using `testng-crossbrowser.xml`.
    - Automated cross-browser artifact collection.
+
+3. **Production Release & Deployment Gate (`.github/workflows/release-production.yml`)**:
+   - Triggers on release version tags (`v*.*.*`) or manual promotion by Release Manager.
+   - **Stage 1 (QA Sign-off)**: Validates 100% P0 regression pass rate on QA before deployment.
+   - **Stage 2 (Deployment)**: Deploys immutable release artifact to live Production server.
+   - **Stage 3 (Smoke Sanity Gate)**: Executes live API & UI Smoke suites against Production; generates 30-day retained release sign-off reports.
 
 ---
 
