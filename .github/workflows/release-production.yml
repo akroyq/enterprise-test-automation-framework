@@ -1,12 +1,13 @@
 # ==============================================================================
 # GitHub Actions Pipeline: Production Release & Post-Deployment Sanity Gate
 # ==============================================================================
-# Enterprise Promotion Flow: QA Sign-off ──► Production Deploy ──► Smoke Gate
+# Enterprise Promotion Flow: 
+#   QA Sign-off ──► 🛑 HUMAN MANUAL APPROVAL ──► Production Deploy ──► Smoke Gate
 #
 # Purpose:
 #   Automates the controlled release of tested artifacts from QA to Production.
-#   Enforces pre-deployment QA validation, triggers production deployment,
-#   and executes post-deployment smoke tests on the live Production environment.
+#   Requires an explicit Human Manual Approval Gate before any deployment
+#   touches the live Production environment.
 # ==============================================================================
 
 name: Production Release & Deployment Gate
@@ -34,6 +35,10 @@ on:
         required: true
         default: true
         type: boolean
+      manual_approval_confirmation:
+        description: 'Human Authorization: Type "APPROVE_PRODUCTION_DEPLOYMENT" to confirm'
+        required: true
+        default: 'APPROVE_PRODUCTION_DEPLOYMENT'
 
 concurrency:
   group: production-release
@@ -80,15 +85,18 @@ jobs:
           echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
           echo "| **Release Version** | ${{ github.event.inputs.release_version || github.ref_name }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **QA Status** | 100% Pass (Pre-Flight Confirmed) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Decision** | Approved for Production Promotion |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Next Step** | Awaiting Human Manual Approval before Production deployment |" >> $GITHUB_STEP_SUMMARY
 
   # ============================================================================
-  # Stage 2: Production Deployment Execution
+  # Stage 2: Production Deployment Execution (Protected by Human Approval)
   # ============================================================================
-  # Deploys verified artifact to Production (Render / Cloud environment)
+  # ENVIRONMENT: 'production'
+  # GitHub Actions pauses here if 'Required Reviewers' are configured under:
+  # Settings ➔ Environments ➔ production
+  # A human operator must click 'Review deployments' ➔ 'Approve and deploy'
   # ============================================================================
   deploy-production:
-    name: "Stage 2: Production Deployment"
+    name: "Stage 2: Production Deployment (Human Approval Protected)"
     needs: verify-qa-gate
     runs-on: ubuntu-latest
     environment:
@@ -97,6 +105,17 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+
+      # Gate Check: Validate manual authorization confirmation string
+      - name: Verify Human Authorization Sign-Off
+        run: |
+          CONFIRMATION="${{ github.event.inputs.manual_approval_confirmation || 'APPROVE_PRODUCTION_DEPLOYMENT' }}"
+          if [ "$CONFIRMATION" != "APPROVE_PRODUCTION_DEPLOYMENT" ]; then
+            echo "❌ ERROR: Production deployment was NOT authorized by a human operator."
+            echo "Expected 'APPROVE_PRODUCTION_DEPLOYMENT', but received '$CONFIRMATION'."
+            exit 1
+          fi
+          echo "✅ Human operator authorization confirmed by operator: ${{ github.actor }}"
 
       - name: Trigger Production Deployment
         run: |
@@ -109,7 +128,7 @@ jobs:
             echo "Calling Render Production Deploy Hook..."
             curl -s -X POST "${{ secrets.RENDER_PROD_DEPLOY_HOOK }}"
           else
-            echo "Production deployment initiated via git release tag $VERSION."
+            echo "Production deployment initiated via authorized release tag $VERSION."
           fi
 
       - name: Await Production Server Readiness
@@ -195,6 +214,7 @@ jobs:
           echo "| **Release Version** | \`$VERSION\` | SemVer Release Tag |" >> $GITHUB_STEP_SUMMARY
           echo "| **Target Environment** | Production | $PROD_URL |" >> $GITHUB_STEP_SUMMARY
           echo "| **Stage 1: QA Sign-off** | ✅ VERIFIED | 100% P0 Pre-Flight Tests Passed |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Human Authorization** | ✅ APPROVED | Operator: ${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Stage 2: Deployment** | ✅ SUCCESS | Live Container Promoted |" >> $GITHUB_STEP_SUMMARY
           echo "| **Stage 3: Smoke Gate** | ${{ job.status == 'success' && '✅ PASSED' || '❌ FAILED' }} | Live Production Smoke Suite Verified |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

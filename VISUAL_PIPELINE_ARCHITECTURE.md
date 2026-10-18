@@ -46,6 +46,7 @@ flowchart TD
     subgraph LANE4 ["🚀 4. DEDICATED PRODUCTION ENVIRONMENT (Render.com)"]
         PROD_TRIGGER["Trigger Production Release<br/>• Push Tag: git tag v1.0.0 OR<br/>• 1-Click UI: release-production.yml"]:::prod
         PROD_GATE1["Stage 1: QA Pre-Flight Check<br/>Validates 100% Pass on QA first"]:::prod
+        PROD_HUMAN_GATE{"🛑 HUMAN MANUAL APPROVAL<br/>QA Lead / Release Manager Sign-off<br/>Approve and Deploy?"}:::gate
         PROD_DEPLOY["Stage 2: Live Production Deploy<br/>https://insurance-claims-prod.onrender.com"]:::prod
         PROD_SMOKE["Stage 3: Live Smoke Sanity Gate<br/>• Critical API calculation check<br/>• Live Production homepage & journeys"]:::prod
         PROD_LIVE["🎉 PRODUCTION LIVE & VERIFIED!<br/>Zero-Defect Release Sign-Off (30-day Reports)"]:::prod
@@ -69,7 +70,9 @@ flowchart TD
 
     QA_REPORT ==>|QA Lead Sign-Off| PROD_TRIGGER
     PROD_TRIGGER --> PROD_GATE1
-    PROD_GATE1 --> PROD_DEPLOY
+    PROD_GATE1 --> PROD_HUMAN_GATE
+    PROD_HUMAN_GATE -->|Approved by Human| PROD_DEPLOY
+    PROD_HUMAN_GATE -.->|Rejected / Blocked| PROD_GATE1
     PROD_DEPLOY --> PROD_SMOKE
     PROD_SMOKE --> PROD_LIVE
 ```
