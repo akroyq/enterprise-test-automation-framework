@@ -10,6 +10,10 @@
 
   <artifactId>claims-api-restassured</artifactId>
   <version>1.0.0</version>
+  <properties>
+    <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+  </properties>
+
   <dependencies>
     <dependency>
       <groupId>com.qualityarchitect</groupId>
@@ -36,7 +40,7 @@
         <version>3.5.3</version>
         <configuration>
           <suiteXmlFiles>
-            <suiteXmlFile>src/test/resources/testng.xml</suiteXmlFile>
+            <suiteXmlFile>${suiteXmlFile}</suiteXmlFile>
           </suiteXmlFiles>
         </configuration>
       </plugin>

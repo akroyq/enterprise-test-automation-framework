@@ -25,7 +25,8 @@ submission/
 ├── README.md               # Quick start guide & architectural overview
 ├── .github/
 │   └── workflows/
-│       └── ci.yml          # GitHub Actions multi-stage automated pipeline
+│       ├── ci.yml                  # GitHub Actions multi-stage automated pipeline
+│       └── nightly-crossbrowser.yml # Scheduled cross-browser regression pipeline
 ├── agents/                 # AI Agent Artifacts (Section 5B Deliverables)
 │   ├── prompts.md          # Structured prompt engineering catalog
 │   ├── system-instructions.md # Quality Architect persona & constraints
@@ -112,6 +113,23 @@ Start-Process automation/api-restassured/target/extent-reports/ExtentReport.html
 # Open UI Report
 Start-Process automation/ui-selenium/target/extent-reports/ExtentReport.html
 ```
+
+---
+
+### 5. 🔄 Continuous Integration & Quality Gates (GitHub Actions)
+The repository enforces Quality Gates across automated GitHub Actions workflows:
+
+1. **Pull Request & Main Branch CI (`.github/workflows/ci.yml`)**:
+   - **Stage 1 (Build & Verification)**: Java 17 compile across all parent & child modules with Maven dependency caching.
+   - **Stage 2 (Service Spin-up & Health Check)**: FastAPI claims backend launched with non-blocking polling health checks on `http://127.0.0.1:8000/docs`.
+   - **Stage 3 (API REST Assured Gate)**: 100% calculation and boundary tests executed. **Blocking Gate**: 0 defects allowed.
+   - **Stage 4 (UI Headless Gate)**: Selenium WebDriver 4 headless Chrome journeys executed with full screenshot capture on failure.
+   - **Stage 5 (Executive Dispatch & Retention)**: ExtentReports 5.x Spark HTML reports, Surefire XMLs, and screenshots retained for **14 days** as CI build artifacts; automated execution summary published to `$GITHUB_STEP_SUMMARY`.
+
+2. **Nightly Cross-Browser Regression (`.github/workflows/nightly-crossbrowser.yml`)**:
+   - Scheduled nightly at `00:00 UTC` with on-demand `workflow_dispatch` trigger.
+   - Matrix execution across **Chrome** and **Firefox** in parallel using `testng-crossbrowser.xml`.
+   - Automated cross-browser artifact collection.
 
 ---
 
