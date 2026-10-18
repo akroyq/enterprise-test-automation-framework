@@ -12,6 +12,7 @@ class ClaimCreate(BaseModel):
     product: str
     claim_amount: float = Field(ge=0)
     deductible: float = Field(ge=0)
+    claim_description: Optional[str] = Field(default="Standard claim request", max_length=200)
 
 @app.get("/", response_class=HTMLResponse)
 def home():
@@ -222,9 +223,10 @@ def home():
         <input id="deductible" type="number" name="deductible" aria-label="Deductible" placeholder="e.g. 100" min="0" step="any" required />
       </div>
 
-
-
-
+      <div class="form-group">
+        <label for="claim-description">Claim Description</label>
+        <input id="claim-description" name="claim_description" aria-label="Claim Description" placeholder="e.g. Minor fender bender at intersection" />
+      </div>
 
       <button id="submit-claim" class="btn btn-primary" type="submit">Submit claim</button>
     </form>
@@ -239,6 +241,10 @@ def home():
         <span id="claim-status" class="result-value badge" data-testid="claim-status"></span>
       </div>
 
+      <div class="result-row">
+        <span class="result-label">Description:</span>
+        <span id="claim-desc" class="result-value" data-testid="claim-desc">-</span>
+      </div>
 
       <div class="result-row">
         <span class="result-label">Settlement:</span>
@@ -262,7 +268,8 @@ def home():
         policy_id: byId('policy-id').value,
         product: byId('product').value,
         claim_amount: Number(byId('claim-amount').value),
-        deductible: Number(byId('deductible').value)
+        deductible: Number(byId('deductible').value),
+        claim_description: byId('claim-description').value || undefined
       };
       
       try {
@@ -279,6 +286,7 @@ def home():
         claimId = data.id;
         byId('claim-id').textContent = data.id;
         byId('claim-status').textContent = data.status;
+        byId('claim-desc').textContent = data.claim_description || 'Standard claim request';
       } catch (err) {
         byId('message').textContent = 'Network error occurred';
       }
