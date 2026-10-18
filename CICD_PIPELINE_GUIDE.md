@@ -170,40 +170,44 @@ All automated API calculations and E2E UI journeys verified successfully.
 
 ---
 
-## 7. ☁️ Live Cloud Hosting & Deployment Architecture
+## 7. ☁️ Dual-Environment Cloud Architecture & Promotion Flow
 
-For testing in staging or remote cloud environments, the dev application (`demo-app`) is hosted on **Render.com** (Free Tier):
+In adherence to enterprise financial and insurance QA standards, the system operates across two physically isolated cloud environments on **Render.com**:
 
-### Cloud Hosting Specification:
-* **Service Type**: Web Service (Python 3)
+```
+┌────────────────────────────────────────────────────────┐         ┌────────────────────────────────────────────────────────┐
+│ 🧪 DEDICATED QA ENVIRONMENT                            │         │ 🚀 DEDICATED PRODUCTION ENVIRONMENT                    │
+├────────────────────────────────────────────────────────┤         ├────────────────────────────────────────────────────────┤
+│ • URL: https://insurance-claims-demo.onrender.com      │ ──────► │ • URL: https://insurance-claims-prod.onrender.com      │
+│ • Branch: 'main'                                       │ Release │ • Branch: Release Tags ('v*.*.*') / Manual Gate        │
+│ • Purpose: Full Regression & System Integration (SIT)  │ Gating  │ • Purpose: Live Customer Claims Processing             │
+│ • Data: Synthetic Test Claims, Edge Cases & Retries    │         │ • Data: Customer Data (Strictly Isolated from QA)      │
+└────────────────────────────────────────────────────────┘         └────────────────────────────────────────────────────────┘
+```
+
+### Environment Topologies & Endpoints:
+
+| Environment | Cloud Service Name | Base URL | Swagger Docs | Auto-Deploy Trigger |
+| :--- | :--- | :--- | :--- | :--- |
+| **QA / Testing** | `insurance-claims-demo` | `https://insurance-claims-demo.onrender.com` | `/docs` | Merges / Pushes to `main` |
+| **Production** | `insurance-claims-prod` | `https://insurance-claims-prod.onrender.com` | `/docs` | Promoted via `release-production.yml` |
+
+### Service Configuration Specifications (FastAPI + Uvicorn):
+* **Runtime**: Python 3.12
 * **Root Directory**: `demo-app`
 * **Build Command**: `pip install -r requirements.txt`
 * **Start Command**: `uvicorn app:app --host 0.0.0.0 --port $PORT`
-* **Public Endpoints**:
-  * Web Portal: `https://<service-name>.onrender.com`
-  * Swagger OpenAPI Documentation: `https://<service-name>.onrender.com/docs`
+* **Health Check Endpoint**: `/docs` (Active polling by CI runners)
 
-### Executing Tests against Staging / Remote Cloud:
-To redirect the test suite from localhost to the remote cloud server, override the `BASE_URL` environment variable:
-
-```powershell
-# Point to live Cloud URL
-$env:BASE_URL="https://your-service-name.onrender.com"
-
-# Execute API Suite against Cloud
-mvn test -f automation/pom.xml -pl api-restassured -am
-
-# Execute UI Suite against Cloud
-mvn test -f automation/pom.xml -pl ui-selenium -am -Dbrowser=chrome -Dheadless=true
-```
+---
 
 ### 7.1 🚀 Production Promotion & Post-Deploy Smoke Gate (`release-production.yml`)
-When code is ready for live customer deployment, the enterprise release pipeline enforces three stages:
+When code on the QA environment receives official QA sign-off, the automated production pipeline promotes the verified artifact through a 3-stage gate:
 
 1. **Stage 1 (QA Release Sign-off Verification)**:
    - Validates that the release candidate passes 100% of P0 tests on the QA environment before initiating deployment.
 2. **Stage 2 (Controlled Production Deployment)**:
-   - Deploys the immutable build artifact to Production (supports Render Deploy Hooks and GitHub Environment Protection Rules).
+   - Deploys the immutable build artifact to Production (`https://insurance-claims-prod.onrender.com`).
    - Polls Production `/docs` health check until server is fully awake and responsive.
 3. **Stage 3 (Post-Deployment Smoke Sanity Gate)**:
    - Executes `testng-smoke.xml` suites (REST Assured and Headless Chrome) against the live Production server.
@@ -257,14 +261,32 @@ If a GitHub Actions pipeline fails on a PR:
 
 ---
 
+### SOP-04: Promoting QA to Production
+When all regression tests on the QA environment pass and the QA Lead grants formal sign-off:
+
+1. **Option A (Manual Promotion via GitHub Actions UI)**:
+   * Navigate to **Actions** ➔ **Production Release & Deployment Gate**.
+   * Click **Run workflow**, enter version tag (e.g. `v1.0.0`), and verify `production_url` points to `https://insurance-claims-prod.onrender.com`.
+   * Confirm that Stage 1 QA verification succeeds, Stage 2 deploys, and Stage 3 Production Smoke tests pass.
+2. **Option B (SemVer Git Tag Release)**:
+   ```powershell
+   git tag v1.0.0
+   git push origin v1.0.0
+   ```
+   * Automatically initiates the 3-stage Production Release pipeline.
+
+---
+
 ## 9. 📂 Key Files & Repository Reference
 
 | File Path | Description |
 | :--- | :--- |
 | [`.github/workflows/ci.yml`](file:///c:/Users/User/Downloads/study/epam-task/.github/workflows/ci.yml) | Multi-stage PR and push CI pipeline with health check, API gate, UI gate, and report publishing. |
 | [`.github/workflows/nightly-crossbrowser.yml`](file:///c:/Users/User/Downloads/study/epam-task/.github/workflows/nightly-crossbrowser.yml) | Scheduled nightly cross-browser regression matrix (Chrome + Firefox). |
+| [`.github/workflows/release-production.yml`](file:///c:/Users/User/Downloads/study/epam-task/.github/workflows/release-production.yml) | Enterprise Production Release promotion, deployment, and post-deploy smoke sanity gate. |
 | [`automation/pom.xml`](file:///c:/Users/User/Downloads/study/epam-task/automation/pom.xml) | Parent aggregator POM orchestrating dependencies and compiler standards. |
 | [`automation/api-restassured/pom.xml`](file:///c:/Users/User/Downloads/study/epam-task/automation/api-restassured/pom.xml) | REST Assured test module with dynamic `${suiteXmlFile}` property. |
 | [`automation/ui-selenium/pom.xml`](file:///c:/Users/User/Downloads/study/epam-task/automation/ui-selenium/pom.xml) | Selenium WebDriver test module with configurable suite and browser drivers. |
 | [`README.md`](file:///c:/Users/User/Downloads/study/epam-task/README.md) | Quick start guide, architecture overview, and test execution instructions. |
 | [`STRATEGY_DOCUMENT.md`](file:///c:/Users/User/Downloads/study/epam-task/STRATEGY_DOCUMENT.md) | Comprehensive enterprise quality strategy, risk matrix, and governance model. |
+

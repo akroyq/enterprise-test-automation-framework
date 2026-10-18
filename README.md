@@ -24,6 +24,7 @@ submission/
 ├── CASE_STUDY.md           # Enterprise Risk-Based Strategy & Quality Architecture
 ├── STRATEGY_DOCUMENT.md    # Master Risk-Driven Quality Architecture Strategy
 ├── CICD_PIPELINE_GUIDE.md  # Standard Operating Procedure & CI/CD Architecture Guide
+├── VISUAL_PIPELINE_ARCHITECTURE.md # Master Visual Flowchart & Animated Lifecycle Diagrams
 ├── README.md               # Quick start guide & architectural overview
 ├── .github/
 │   └── workflows/
@@ -98,7 +99,10 @@ cd automation/ui-selenium
 mvn test
 ```
 
-> **Note**: Selenium Manager automatically provisions the appropriate browser driver. Set the `BASE_URL` environment variable if testing against a remote or alternative port (e.g. `$env:BASE_URL="http://localhost:8000"`).
+> **Note**: Selenium Manager automatically provisions the appropriate browser driver. To run tests against the dedicated live environments, set the `BASE_URL` environment variable:
+> - **QA Environment**: `$env:BASE_URL="https://insurance-claims-demo.onrender.com"`
+> - **Production Environment**: `$env:BASE_URL="https://insurance-claims-prod.onrender.com"`
+> - **Local Development**: Default fallback is `http://localhost:8000`.
 
 ---
 

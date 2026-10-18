@@ -28,7 +28,7 @@ on:
       production_url:
         description: 'Target Production Base URL'
         required: true
-        default: 'https://insurance-claims-demo.onrender.com'
+        default: 'https://insurance-claims-prod.onrender.com'
       run_full_regression_on_qa_first:
         description: 'Verify QA Gate before deploying to Production?'
         required: true
@@ -93,14 +93,14 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: ${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}
+      url: ${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
       - name: Trigger Production Deployment
         run: |
-          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}"
+          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}"
           VERSION="${{ github.event.inputs.release_version || github.ref_name }}"
           echo "Deploying release $VERSION to Production at $PROD_URL..."
           
@@ -114,7 +114,7 @@ jobs:
 
       - name: Await Production Server Readiness
         run: |
-          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}"
+          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}"
           echo "Waiting for Production server at $PROD_URL/docs to be healthy..."
           
           python -c "
@@ -156,7 +156,7 @@ jobs:
 
       - name: Execute Production Smoke Tests (REST Assured)
         env:
-          BASE_URL: ${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}
+          BASE_URL: ${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}
           ENV: "Production"
         run: |
           echo "Running Production Smoke Test Suite against: $BASE_URL"
@@ -164,7 +164,7 @@ jobs:
 
       - name: Execute Production UI Smoke Tests (Headless Chrome)
         env:
-          BASE_URL: ${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}
+          BASE_URL: ${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}
           BROWSER: "chrome"
           HEADLESS: "true"
           ENV: "Production"
@@ -185,7 +185,7 @@ jobs:
       - name: Publish Production Release Executive Summary
         if: always()
         run: |
-          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-demo.onrender.com' }}"
+          PROD_URL="${{ github.event.inputs.production_url || 'https://insurance-claims-prod.onrender.com' }}"
           VERSION="${{ github.event.inputs.release_version || github.ref_name }}"
           
           echo "## 🚀 Production Release Executive Verdict" >> $GITHUB_STEP_SUMMARY
