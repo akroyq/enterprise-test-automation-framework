@@ -145,6 +145,102 @@ sequenceDiagram
 
 ---
 
+## 🔄 Dynamic Enterprise State Machine (Ticket/Code Lifecycle Flow)
+
+This state diagram visualizes the exact states, decision gates, and transitions every commit undergoes before reaching customers:
+
+```mermaid
+stateDiagram-v2
+    direction TB
+
+    [*] --> FeatureBranch: 💻 Developer creates branch 'feature/*' from 'qa'
+    
+    state FeatureBranch {
+        [*] --> CodeDevelopment: Writes code in demo-app/ or automation/
+        CodeDevelopment --> LocalPreFlight: Run local 'mvn test-compile -DskipTests'
+        LocalPreFlight --> PushRemote: git push -u origin feature/*
+    }
+
+    PushRemote --> PullRequestQA: 🐙 Open Pull Request to 'qa'
+
+    state PullRequestQA {
+        [*] --> Stage1_Build: GitHub Actions 'ci.yml' Triggered
+        Stage1_Build --> Stage2_FastAPI: In-runner spin-up (localhost:8000)
+        Stage2_FastAPI --> Stage3_APIGate: REST Assured P0 Boundary Tests
+        Stage3_APIGate --> Stage4_UIGate: Headless Chrome E2E Journeys
+        Stage4_UIGate --> Stage5_GateVerdict: Quality Gate Evaluation
+        
+        Stage5_GateVerdict --> PR_Blocked: ❌ Any Test Failed (<100%)
+        Stage5_GateVerdict --> PR_Approved: ✅ 100% Pass Rate
+    }
+
+    PR_Blocked --> CodeDevelopment: Fix bug on local feature branch
+    PR_Approved --> MergeQA: 🔀 Click 'Merge pull request' into 'qa'
+
+    state MergeQA {
+        [*] --> RenderQAHook: Render Webhook Detects 'qa' Push
+        RenderQAHook --> BuildQAService: pip install & uvicorn restart
+        BuildQAService --> QALiveActive: 🧪 Deployed to insurance-claims-demo
+    }
+
+    MergeQA --> QAVerification: 🔬 Dedicated QA Verification
+
+    state QAVerification {
+        [*] --> PostMergeCI: 'ci.yml' runs against Live QA URL
+        PostMergeCI --> ExtentReportsPublished: ExtentReports 5.x HTML Published (14d)
+        ExtentReportsPublished --> NightlyMatrix: 🌙 00:00 UTC Chrome + Firefox
+        NightlyMatrix --> QASignOffGranted: 👔 QA Lead Signs Off
+    }
+
+    QASignOffGranted --> PullRequestMain: 🚀 Open PR 'qa' ➔ 'main'
+
+    state PullRequestMain {
+        [*] --> MergeMain: PR Approved & Merged into 'main'
+        MergeMain --> ProdTrigger: Trigger 'release-production.yml' (Tag / UI)
+        ProdTrigger --> QA_PreFlightCheck: Re-verify 100% P0 on QA First
+        QA_PreFlightCheck --> HumanApprovalGate: 🛑 Human Operator Confirmation
+        HumanApprovalGate --> ProdDeployment: Deploy to insurance-claims-prod
+        ProdDeployment --> LiveSmokeGate: Run testng-smoke.xml on Production
+    }
+
+    PullRequestMain --> ProductionVerifiedLive: 🎉 ZERO-DEFECT PRODUCTION LIVE
+    ProductionVerifiedLive --> [*]
+```
+
+---
+
+## ⚡ High-Velocity Code Promotion Pipeline (Live Path)
+
+```
+  ┌─────────────────┐       PR to 'qa'       ┌────────────────────────┐
+  │ 💻 DEVELOPER    ├───────────────────────►│ ⚡ IN-RUNNER CI GATES   │
+  │ feature/xyz     │                        │  • Build Verification  │
+  └─────────────────┘                        │  • REST Assured API P0 │
+                                             │  • Selenium Headless UI│
+                                             └───────────┬────────────┘
+                                                         │ 100% Pass
+                                                         ▼
+  ┌─────────────────────────────────┐   Auto-Deploy  ┌────────────────────────┐
+  │ 🧪 DEDICATED QA ENVIRONMENT     │◄───────────────┤ 🐙 'qa' BRANCH MERGE   │
+  │ insurance-claims-demo.onrender  │                └────────────────────────┘
+  │  • ExtentReports 5.x HTML (14d) │
+  │  • Nightly Matrix (Chrome+FF)   │
+  └────────────────┬────────────────┘
+                   │ QA Lead Sign-off
+                   ▼
+  ┌─────────────────────────────────┐   Merge & Gate ┌────────────────────────┐
+  │ 🛑 PRODUCTION HUMAN GATE        ├───────────────►│ 🚀 'main' BRANCH MERGE │
+  │ 'APPROVE_PRODUCTION_DEPLOYMENT' │                └───────────┬────────────┘
+  └─────────────────────────────────┘                            │
+                                                                 ▼
+  ┌─────────────────────────────────┐   Live Smoke   ┌────────────────────────┐
+  │ 🎉 PRODUCTION VERIFIED LIVE     │◄───────────────┤ 🌐 LIVE PROD DEPLOY    │
+  │ insurance-claims-prod.onrender  │                │ insurance-claims-prod  │
+  └─────────────────────────────────┘                └────────────────────────┘
+```
+
+---
+
 ## 📋 Environment & Pipeline Quick Reference Matrix
 
 | Metric | 🧪 Dedicated QA Environment | 🚀 Dedicated Production Environment |
