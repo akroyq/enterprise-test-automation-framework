@@ -56,63 +56,43 @@ feature/claim-fix ───► PR into 'qa' ───► [CI Gates] ───►
 
 ---
 
-## 3. 🔄 Multi-Stage CI Pipeline Architecture (`ci.yml`)
+## 3. 🔄 Tiered CI Pipeline Architecture (`ci.yml`)
 
-The primary CI pipeline triggers on every **Push**, **Pull Request**, or manual **Workflow Dispatch**:
+The repository enforces a modern two-tier gating hierarchy:
+1. **Pre-Merge PR Quality Gate (`pull_request` event)**: Fast compilation and unit tests only (< 30s SLA) to prevent blocking developer velocity while catching calculation and schema regressions before merging into `qa`.
+2. **Post-Merge QA Environment Gate (`push` to `qa` event)**: Deploys to live Render QA (`insurance-claims-demo.onrender.com`) and executes full end-to-end test automation suites (REST Assured API + Selenium 4 WebDriver E2E).
 
 ```mermaid
 flowchart TD
-    A[Trigger: Push / Pull Request / Dispatch] --> B[Concurrency Control: Cancel In-Progress Runs]
-    B --> C[Stage 1: Build & Dependency Verification]
-    
-    subgraph S1 [Stage 1: Module Compilation]
-        C --> C1[Java 17 Temurin Setup + Maven Cache]
-        C1 --> C2[mvn clean test-compile -B]
+    subgraph TIER1 ["⚡ TIER 1: PRE-MERGE PR QUALITY GATE (Fast Unit Tests)"]
+        A[PR to 'qa' Branch] --> B[Stage 1: Build & Verify Modules]
+        B --> C[Stage 2: Fast Pre-Merge Unit Tests Gate]
+        C --> C1[Python FastAPI Unit Tests: pytest < 2s]
+        C --> C2[Java Core Framework Unit Tests: mvn test < 5s]
+        C1 & C2 --> D{Unit Tests 100% Pass?}
+        D -->|Yes| E[✅ PR Approved: Ready to Merge into 'qa']
+        D -->|No| F[❌ Merge Blocked: Fix Locally]
     end
 
-    C2 --> D[Stage 2 & 3: API Test Suite Gate]
-
-    subgraph S2 [Stage 2 & 3: REST Assured Fast Gate]
-        D --> D1[Setup Python 3.12 + Pip Cache]
-        D1 --> D2[Launch FastAPI: uvicorn app:app --app-dir demo-app]
-        D2 --> D3[Active Polling Health Check: /docs 200 OK]
-        D3 --> D4[Execute REST Assured API Tests]
-        D4 --> D5[Upload ExtentReports HTML & Surefire Artifacts 14d]
-        D5 --> D6[Publish API Summary to GITHUB_STEP_SUMMARY]
-    end
-
-    D4 -->|Pass 100%| E[Stage 4: UI Headless Suite Gate]
-    D4 -->|Fail| H[❌ Merge Blocked]
-
-    subgraph S3 [Stage 4: Headless Selenium 4 Gate]
-        E --> E1[Setup Python 3.12 & Launch FastAPI]
-        E1 --> E2[Active Polling Health Check]
-        E2 --> E3[Run Headless Chrome 1440x1000 Selenium Tests]
-        E3 --> E4[Capture Base64 Screenshots on Failure]
-        E4 --> E5[Upload UI ExtentReports & Screenshots Artifacts 14d]
-        E5 --> E6[Publish UI Summary to GITHUB_STEP_SUMMARY]
-    end
-
-    E3 --> F[Stage 5: Quality Gate Enforcement Verdict]
-    
-    subgraph S4 [Stage 5: Executive Dispatch]
-        F --> F1[Evaluate API & UI Results]
-        F1 --> F2[Publish Consolidated Gate Matrix Table]
-        F2 --> F3{All Gates Passed?}
-        F3 -->|Yes| G[✅ Gate PASSED: PR Ready to Merge]
-        F3 -->|No| H[❌ Gate FAILED: Merge Blocked]
+    subgraph TIER2 ["🧪 TIER 2: POST-MERGE QA ENVIRONMENT QUALITY GATE"]
+        E --> G[Merge into 'qa' Branch]
+        G --> H[🚀 Render Auto-Deploy to QA Environment]
+        H --> I[Stage 3: REST Assured API Suite on Live QA]
+        I --> J[Stage 4: Headless Selenium UI Suite on Live QA]
+        J --> K[Stage 5: ExtentReports 5.x HTML Published 14d]
+        K --> L[👔 QA Lead Release Sign-Off]
     end
 ```
 
 ### Stage-by-Stage Breakdown:
 
-| Stage | Responsibility | Tooling | Quality SLA | Failure Action |
-| :--- | :--- | :--- | :--- | :--- |
-| **Stage 1: Build & Verification** | Validates Java syntax, dependencies, pom hierarchies across all 3 modules (`automation-core`, `api-restassured`, `ui-selenium`). | Maven, OpenJDK 17 | Zero compile errors | Immediate pipeline termination |
-| **Stage 2: Health Check** | Spins up FastAPI backend and verifies readiness using an active polling loop on `http://127.0.0.1:8000/docs` (up to 30 retries). | Python 3.12, Uvicorn | Server up in < 5 seconds | Fails before running tests |
-| **Stage 3: API Test Gate** | Executes 100% of P0 claims calculation, deductible validations, and schema boundary tests. | REST Assured, TestNG, Jayway JsonPath | Execution time < 20 seconds. **0 failures allowed**. | **Blocks UI stage and blocks PR merge** |
-| **Stage 4: UI Headless Gate** | Executes end-to-end user journeys (policy lookup, claim form input, calculation verification, submission) in Headless Chrome. | Selenium WebDriver 4, PageFactory, ChromeOptions | 0 P0/P1 journey failures | Uploads failure screenshot and blocks PR |
-| **Stage 5: Quality Gate Verdict** | Consolidates status, evaluates compliance against SLA benchmarks, and renders an executive status table on the GitHub PR. | GitHub Actions Step Summary, ExtentReports 5.x | 100% pass rate across blocking gates | Sets build status to Failed if any gate violates SLA |
+| Stage | Trigger Scope | Responsibility | Tooling | Quality SLA | Failure Action |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **Stage 1: Build & Verification** | All Events (`PR` & `Push`) | Validates Java syntax, dependencies, pom hierarchies across all 3 modules (`automation-core`, `api-restassured`, `ui-selenium`). | Maven, OpenJDK 17 | Zero compile errors | Immediate pipeline termination |
+| **Stage 2: Fast Pre-Merge Unit Tests** | All Events (`PR` & `Push`) | Validates FastAPI Pydantic schema validation, deductible calculation rules, HTTP contracts, and Java framework core utilities. | Python 3.12, Pytest, TestNG | Execution time < 30 seconds. **0 failures allowed**. | **Blocks PR merge into 'qa'** |
+| **Stage 3: Live QA API Test Gate** | Post-Merge (`Push` to `qa`) | Executes 100% of P0 claims calculation, deductible validations, and boundary tests against the live deployed QA server. | REST Assured, TestNG, Jayway JsonPath | 0 calculation failures on live QA | Blocks QA sign-off & ExtentReport flagged |
+| **Stage 4: Live QA UI Headless Gate** | Post-Merge (`Push` to `qa`) | Executes end-to-end user journeys (claim submission, status verification, calculation triggers) in Headless Chrome on Live QA. | Selenium WebDriver 4, PageFactory, ChromeOptions | 0 journey failures | Captures failure screenshots to ExtentReports |
+| **Stage 5: Quality Gate Verdict** | All Events | Consolidates status, evaluates compliance against SLA benchmarks, and publishes an executive summary to GitHub Actions Step Summary. | GitHub Actions Step Summary, ExtentReports 5.x | 100% pass rate across blocking gates | Sets build status to Failed if any gate violates SLA |
 
 ---
 

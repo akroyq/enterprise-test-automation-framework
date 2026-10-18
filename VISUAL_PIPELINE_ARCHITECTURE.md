@@ -19,26 +19,26 @@ flowchart TD
 
     %% Lane 1: Development
     subgraph LANE1 ["💻 1. DEVELOPER WORKSPACE"]
-        DEV_CODE["Feature Branch: feature/claim-fix<br/>• Writes Code in demo-app/ or automation/<br/>• Runs Local Pre-Flight: mvn test-compile"]:::dev
+        DEV_CODE["Feature Branch: feature/claim-fix<br/>• Writes Code in demo-app/ or automation/<br/>• Runs Local Pre-Flight: pytest & mvn test-compile"]:::dev
         PUSH_PR["git push & Open Pull Request<br/>(feature/claim-fix ➔ qa branch)"]:::dev
     end
 
     %% Lane 2: PR Gating
-    subgraph LANE2 ["⚡ 2. PRE-MERGE QUALITY GATE (GitHub Actions CI)"]
+    subgraph LANE2 ["⚡ 2. PRE-MERGE QUALITY GATE (Fast Unit Tests Only)"]
         PR_BUILD["Stage 1: Build Verification<br/>• Java 17 compile across all 3 modules"]:::pr
-        PR_EPHEMERAL["Stage 2 & 3: Fast Gate<br/>• Runs FastAPI in-runner (localhost:8000)<br/>• REST Assured API Suite (P0 Gate)"]:::pr
-        PR_UI["Stage 4: Headless Selenium UI<br/>• Headless Chrome E2E Journeys"]:::pr
-        PR_VERDICT{"Stage 5: Quality Gate<br/>100% Pass Rate?"}:::gate
-        PR_BLOCKED["❌ MERGE BLOCKED<br/>Defect Caught Before Merge!"]:::failure
-        PR_MERGE["✅ PR APPROVED<br/>Merge into 'qa' Allowed"]:::qa
+        PR_UNIT["Stage 2: Fast Pre-Merge Unit Tests<br/>• FastAPI Pytest Unit Tests (< 2s)<br/>• Java Core Framework Unit Tests (< 5s)"]:::pr
+        PR_VERDICT{"Stage 5: Quality Gate<br/>100% Unit Tests Pass?"}:::gate
+        PR_BLOCKED["❌ MERGE BLOCKED<br/>Unit Test Assertion Failed!"]:::failure
+        PR_MERGE["✅ PR APPROVED<br/>Merge into 'qa' Allowed (< 30s Loop)"]:::qa
     end
 
     %% Lane 3: Dedicated QA
     subgraph LANE3 ["🧪 3. DEDICATED QA ENVIRONMENT (Render.com)"]
         QA_DEPLOY["🚀 Auto-Deploy to QA Server<br/>Branch: 'qa'<br/>https://insurance-claims-demo.onrender.com"]:::qa
-        QA_WAKE["Automatic Server Wake-up<br/>Polls /docs until 200 OK"]:::qa
-        QA_SUITE["🔬 Live QA Regression Suite<br/>• REST Assured API Boundary Tests<br/>• Selenium Headless UI Journeys"]:::qa
-        QA_REPORT["📊 ExtentReports 5.x HTML Published<br/>Retained 14 Days in CI Artifacts"]:::qa
+        QA_WAKE["Server Wake-up & Health Check<br/>Polls /docs until 200 OK"]:::qa
+        QA_API["Stage 3: Live REST Assured API Suite<br/>• P0 Financial & Boundary Regression Gate"]:::qa
+        QA_UI["Stage 4: Live Headless Selenium UI Suite<br/>• Multi-step E2E Claims Journeys"]:::qa
+        QA_REPORT["📊 Stage 5: ExtentReports 5.x HTML Published<br/>Retained 14 Days in CI Artifacts"]:::qa
         NIGHTLY_CRON["🌙 Nightly 00:00 UTC Cross-Browser Matrix<br/>Parallel Runs on Chrome & Firefox"]:::qa
     end
 
@@ -56,17 +56,17 @@ flowchart TD
     %% Flow Connections
     DEV_CODE --> PUSH_PR
     PUSH_PR --> PR_BUILD
-    PR_BUILD --> PR_EPHEMERAL
-    PR_EPHEMERAL --> PR_UI
-    PR_UI --> PR_VERDICT
+    PR_BUILD --> PR_UNIT
+    PR_UNIT --> PR_VERDICT
 
     PR_VERDICT -->|No / Regression| PR_BLOCKED
     PR_VERDICT -->|Yes / 0 Defects| PR_MERGE
 
     PR_MERGE -->|Merge to 'qa'| QA_DEPLOY
     QA_DEPLOY --> QA_WAKE
-    QA_WAKE --> QA_SUITE
-    QA_SUITE --> QA_REPORT
+    QA_WAKE --> QA_API
+    QA_API --> QA_UI
+    QA_UI --> QA_REPORT
     QA_REPORT -.-> NIGHTLY_CRON
 
     QA_REPORT ==>|QA Sign-Off: Create PR| PROD_PR
@@ -95,31 +95,30 @@ sequenceDiagram
     participant Prod as 🚀 Render Prod Server (Branch: main)
     actor Lead as 👔 QA Lead / Release Manager
 
-    %% Step 1: Branch & PR to QA
+    %% Step 1: Branch & PR to QA (Fast Unit Tests Only)
     rect rgb(238, 246, 255)
-    Note over Dev,CI: PHASE 1: Feature Branch & PR to 'qa' Quality Gate
+    Note over Dev,CI: PHASE 1: Feature Branch & Pre-Merge Unit Tests Gate (<30s)
     Dev->>Git: git push origin feature/claim-fix
     Dev->>Git: Open Pull Request (feature/claim-fix ➔ 'qa')
-    Git->>CI: Trigger 'Enterprise Quality CI/CD' (PR to qa Event)
-    CI->>CI: Compile Java 17 Parent & Modules
-    CI->>CI: Start in-runner FastAPI (localhost:8000)
-    CI->>CI: Run REST Assured API Tests
-    CI->>CI: Run Headless Chrome UI Tests
-    CI-->>Git: Post PR Summary: ✅ ALL GATES PASSED
+    Git->>CI: Trigger 'Enterprise Quality CI/CD' (PR Event)
+    CI->>CI: Stage 1: Compile Java 17 Parent & Modules
+    CI->>CI: Stage 2: Run Python FastAPI Unit Tests (pytest: 14 tests in 1.5s)
+    CI->>CI: Stage 2: Run Java Core Framework Unit Tests (mvn test: 2 tests in 5s)
+    CI-->>Git: Post PR Summary: ✅ PRE-MERGE UNIT TESTS PASSED (E2E Deferred to QA)
     end
 
-    %% Step 2: Merge to QA & Dedicated QA Deployment
+    %% Step 2: Merge to QA & Dedicated QA Live Automation
     rect rgb(235, 253, 240)
-    Note over Git,QA: PHASE 2: Merge into 'qa' & Auto-Deploy to QA Environment
+    Note over Git,QA: PHASE 2: Merge into 'qa' & Full Live Automation Suites
     Dev->>Git: Click 'Merge Pull Request' into 'qa'
     Git->>QA: GitHub Webhook ➔ Trigger Auto-Deploy on branch 'qa'
     QA->>QA: pip install -r requirements.txt & uvicorn app:app
-    Git->>CI: Trigger Post-Merge CI Pipeline on 'qa'
+    Git->>CI: Trigger Post-Merge CI Pipeline on 'qa' Push
     CI->>QA: Active Ping https://insurance-claims-demo.onrender.com/docs
     QA-->>CI: 200 OK (QA Server Awake & Healthy)
-    CI->>QA: Run Full REST Assured API Suite on Live QA
-    CI->>QA: Run Selenium UI Headless Chrome on Live QA
-    CI-->>Lead: ExtentReports 5.x HTML Generated (0 Defects)
+    CI->>QA: Stage 3: Run Live REST Assured API Suite on QA (P0 Gate)
+    CI->>QA: Stage 4: Run Live Selenium UI Headless Chrome on QA
+    CI-->>Lead: Stage 5: ExtentReports 5.x HTML Published (14-Day Archival)
     Lead-->>Dev: QA Sign-off Granted! Ready for Production.
     end
 
@@ -157,7 +156,7 @@ stateDiagram-v2
     
     state FeatureBranch {
         [*] --> CodeDevelopment: Writes code in demo-app/ or automation/
-        CodeDevelopment --> LocalPreFlight: Run local 'mvn test-compile -DskipTests'
+        CodeDevelopment --> LocalPreFlight: Run local pytest & mvn test-compile
         LocalPreFlight --> PushRemote: git push -u origin feature/*
     }
 
@@ -165,13 +164,11 @@ stateDiagram-v2
 
     state PullRequestQA {
         [*] --> Stage1_Build: GitHub Actions 'ci.yml' Triggered
-        Stage1_Build --> Stage2_FastAPI: In-runner spin-up (localhost:8000)
-        Stage2_FastAPI --> Stage3_APIGate: REST Assured P0 Boundary Tests
-        Stage3_APIGate --> Stage4_UIGate: Headless Chrome E2E Journeys
-        Stage4_UIGate --> Stage5_GateVerdict: Quality Gate Evaluation
+        Stage1_Build --> Stage2_FastUnitTests: Run Pytest & Java Core Unit Tests
+        Stage2_FastUnitTests --> Stage5_GateVerdict: Evaluate Unit Testing Gate (< 30s)
         
-        Stage5_GateVerdict --> PR_Blocked: ❌ Any Test Failed (<100%)
-        Stage5_GateVerdict --> PR_Approved: ✅ 100% Pass Rate
+        Stage5_GateVerdict --> PR_Blocked: ❌ Unit Test Assertion Failed
+        Stage5_GateVerdict --> PR_Approved: ✅ 100% Pass Rate (E2E Deferred)
     }
 
     PR_Blocked --> CodeDevelopment: Fix bug on local feature branch
@@ -183,11 +180,13 @@ stateDiagram-v2
         BuildQAService --> QALiveActive: 🧪 Deployed to insurance-claims-demo
     }
 
-    MergeQA --> QAVerification: 🔬 Dedicated QA Verification
+    MergeQA --> QAVerification: 🔬 Full Automation Suites on Live QA
 
     state QAVerification {
-        [*] --> PostMergeCI: 'ci.yml' runs against Live QA URL
-        PostMergeCI --> ExtentReportsPublished: ExtentReports 5.x HTML Published (14d)
+        [*] --> PostMergeCI: 'ci.yml' triggers on 'qa' Push
+        PostMergeCI --> Stage3_APIGate: Live REST Assured API Suite (P0)
+        Stage3_APIGate --> Stage4_UIGate: Live Headless Selenium 4 UI Journeys
+        Stage4_UIGate --> ExtentReportsPublished: ExtentReports 5.x HTML Published (14d)
         ExtentReportsPublished --> NightlyMatrix: 🌙 00:00 UTC Chrome + Firefox
         NightlyMatrix --> QASignOffGranted: 👔 QA Lead Signs Off
     }
@@ -213,17 +212,19 @@ stateDiagram-v2
 
 ```
   ┌─────────────────┐       PR to 'qa'       ┌────────────────────────┐
-  │ 💻 DEVELOPER    ├───────────────────────►│ ⚡ IN-RUNNER CI GATES   │
+  │ 💻 DEVELOPER    ├───────────────────────►│ ⚡ PRE-MERGE UNIT GATE  │
   │ feature/xyz     │                        │  • Build Verification  │
-  └─────────────────┘                        │  • REST Assured API P0 │
-                                             │  • Selenium Headless UI│
+  └─────────────────┘                        │  • FastAPI Unit Tests  │
+                                             │  • Core Java Unit Tests│
                                              └───────────┬────────────┘
-                                                         │ 100% Pass
+                                                         │ 100% Pass (<30s)
                                                          ▼
   ┌─────────────────────────────────┐   Auto-Deploy  ┌────────────────────────┐
   │ 🧪 DEDICATED QA ENVIRONMENT     │◄───────────────┤ 🐙 'qa' BRANCH MERGE   │
-  │ insurance-claims-demo.onrender  │                └────────────────────────┘
-  │  • ExtentReports 5.x HTML (14d) │
+  │ insurance-claims-demo.onrender  │                └───────────┬────────────┘
+  │  • REST Assured API Suite (P0)  │                            │
+  │  • Selenium Headless UI Suite   │◄───────────────────────────┘
+  │  • ExtentReports 5.x HTML (14d) │      Runs Live Test Automation
   │  • Nightly Matrix (Chrome+FF)   │
   └────────────────┬────────────────┘
                    │ QA Lead Sign-off
